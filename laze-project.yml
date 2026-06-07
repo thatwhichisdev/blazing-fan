@@ -8,3 +8,5 @@ apps:
   - name: blazing-fan
     context:
       - rp2040
+    selects:
+      - defmt
