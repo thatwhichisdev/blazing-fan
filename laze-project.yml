@@ -1,8 +1,5 @@
 imports:
-  - git:
-      url: https://github.com/ariel-os/ariel-os
-      branch: main
-    dldir: ariel-os
+  - path: ../ariel-os
 
 apps:
   - name: blazing-fan

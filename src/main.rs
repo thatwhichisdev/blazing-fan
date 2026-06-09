@@ -72,7 +72,7 @@ const UART_RES_MAX_SIZE: usize = UartResponse::POSTCARD_MAX_SIZE;
 
 #[ariel_os::task(autostart, peripherals)]
 async fn uart_a_listener(peripherals: UartAPins) {
-    let uart_0_config = hal::uart::Config::default();
+    let uart_0_config = ariel_os::hal::uart::Config::default();
     let mut uart_0_rx_buf = [0u8; 32];
     let mut uart_0_tx_buf = [0u8; 32];
     let mut uart_a = pins::UartA::new(

@@ -15,10 +15,10 @@ let
 
   rustToolchain = pkgs.fenix.fromToolchainFile {
     file = ./rust-toolchain.toml;
-    sha256 = "sha256-eeq8tmjoth7VJGVp65a5e+dEQFk/lzKuSq6jWETXwb4=";
+    sha256 = "sha256-XSTXenuh9nBL9paMVu/SDiYppNwfKh8Y2BUAngM3xaE=";
   };
 in
-pkgs.mkShellNoCC {
+pkgs.mkShell {
   packages = with pkgs; [
     gitui
     rustToolchain
@@ -34,6 +34,7 @@ pkgs.mkShellNoCC {
   STARSHIP_CONFIG = "./.starship/starship.toml";
 
   shellHook = ''
+    unset NIX_ENFORCE_PURITY
     exec nu --config ./.nu/config.nu
   '';
 }

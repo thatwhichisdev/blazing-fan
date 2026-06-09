@@ -1,19 +1,19 @@
 [language-server.rust-analyzer.config.cargo]
 features = [
+    "ariel-os/panic-printing",
+    "ariel-os/defmt-rtt",
+    "ariel-os/defmt",
+    "ariel-os/debug-channel",
     "ariel-os/single-core",
     "ariel-os/executor-interrupt",
-    "ariel-os/defmt-rtt",
     "ariel-os/semihosting",
-    "ariel-os/panic-printing",
-    "ariel-os/defmt",
-    "ariel-os/debug-console",
 ]
 
 [language-server.rust-analyzer.config.cargo.buildScripts]
 overrideCommand = [
     "cargo",
     "check",
-    "--features=ariel-os/single-core,ariel-os/executor-interrupt,ariel-os/defmt-rtt,ariel-os/semihosting,ariel-os/panic-printing,ariel-os/defmt,ariel-os/debug-console",
+    "--features=ariel-os/panic-printing,ariel-os/defmt-rtt,ariel-os/defmt,ariel-os/debug-channel,ariel-os/single-core,ariel-os/executor-interrupt,ariel-os/semihosting",
     "--message-format=json",
 ]
 
@@ -35,7 +35,7 @@ SCRIPTS = "./scripts"
 [language-server.rust-analyzer.config.check]
 allTargets = false
 command = "clippy"
-extraArgs = ["--features=ariel-os/single-core,ariel-os/executor-interrupt,ariel-os/defmt-rtt,ariel-os/semihosting,ariel-os/panic-printing,ariel-os/defmt,ariel-os/debug-console"]
+extraArgs = ["--features=ariel-os/panic-printing,ariel-os/defmt-rtt,ariel-os/defmt,ariel-os/debug-channel,ariel-os/single-core,ariel-os/executor-interrupt,ariel-os/semihosting"]
 
 [language-server.rust-analyzer.config.files]
 watcher = "server"
