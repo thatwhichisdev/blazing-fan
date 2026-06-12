@@ -1,9 +1,0 @@
-imports:
-  - path: ../ariel-os
-
-apps:
-  - name: blazing-fan
-    context:
-      - rp2040
-    selects:
-      - defmt

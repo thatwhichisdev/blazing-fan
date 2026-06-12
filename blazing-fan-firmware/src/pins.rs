@@ -1,13 +1,10 @@
-use ariel_os::hal::{define_peripherals, group_peripherals, peripherals, uart};
-
-#[cfg(context = "rp2040")]
-pub type UartA<'a> = uart::UART0<'a>;
-
-#[cfg(context = "rp2040")]
-pub type UartB<'a> = uart::UART1<'a>;
+use ariel_os::hal::{define_peripherals, group_peripherals, i2c, peripherals, uart};
 
 #[cfg(context = "rp2040")]
 define_peripherals!(ButtonPin { button: PIN_12 });
+
+#[cfg(context = "rp2040")]
+pub type UartA<'a> = uart::UART0<'a>;
 
 #[cfg(context = "rp2040")]
 define_peripherals!(UartAPins {
@@ -16,16 +13,21 @@ define_peripherals!(UartAPins {
 });
 
 #[cfg(context = "rp2040")]
+pub type UartB<'a> = uart::UART1<'a>;
+
+#[cfg(context = "rp2040")]
 define_peripherals!(UartBPins {
     uart1_tx: PIN_8,
     uart1_rx: PIN_9
 });
 
 #[cfg(context = "rp2040")]
+pub type EmcI2C = i2c::controller::I2C0;
+
+#[cfg(context = "rp2040")]
 define_peripherals!(EmcPins {
     sda: PIN_4,
     scl: PIN_5,
-    i2c: I2C0,
 });
 
 #[cfg(context = "rp2040")]

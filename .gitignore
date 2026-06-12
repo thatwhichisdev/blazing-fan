@@ -1,5 +1,7 @@
 /target
 /build
+/blazing-fan-firmware/target
+/blazing-fan-firmware/build
 .gdb_history
 
 # Devenv

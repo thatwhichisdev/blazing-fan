@@ -8,12 +8,12 @@ use ariel_os::{
     hal,
 };
 use defmt::{error, info};
-use embassy_sync::{blocking_mutex::raw::CriticalSectionRawMutex, channel::Channel};
-use postcard::experimental::max_size::{self, MaxSize};
+use fugit::Rate;
+use postcard::experimental::max_size::MaxSize;
 use postcard::{from_bytes, to_slice};
 use serde::{Deserialize, Serialize};
 
-use crate::pins::{ButtonPin, Peripherals, UartAPins, UartBPins};
+use crate::pins::{ButtonPin, EmcI2C, Peripherals, UartAPins, UartBPins};
 
 use embedded_io_async::{Read as _, Write as _};
 
@@ -31,7 +31,22 @@ struct OperatingSystem {
 }
 
 #[ariel_os::task(autostart, peripherals)]
-async fn main(peripherals: Peripherals) {}
+async fn main(peripherals: Peripherals) {
+    let i2c_config = hal::i2c::controller::Config::default();
+    let i2c0 = EmcI2C::new(peripherals.emc.sda, peripherals.emc.scl, i2c_config);
+    let mut emc = emc2101::AsyncEMC2101::new(i2c0).await.unwrap();
+
+    emc.enable_tach_input().await.unwrap();
+    emc.set_fan_pwm(Rate::<u32, _, _>::kHz(25), false)
+        .await
+        .expect("should set fan pwm");
+
+    let external_temp = emc.temp_external().await.unwrap();
+    let internal_temp = emc.temp_internal().await.unwrap();
+
+    info!("emc external temp {=i8}", external_temp);
+    info!("emc internal temp {=i8}", internal_temp);
+}
 
 #[ariel_os::task(autostart, peripherals)]
 async fn button_listener(peripherals: ButtonPin) {
@@ -64,7 +79,7 @@ enum UartRequest {
 #[derive(Serialize, Deserialize, Debug, Eq, PartialEq, MaxSize)]
 enum UartResponse {
     Empty,
-    Report { rpm: u8 },
+    Report { rpm: u16 },
 }
 
 const UART_REQ_MAX_SIZE: usize = UartRequest::POSTCARD_MAX_SIZE;
@@ -130,6 +145,8 @@ async fn uart_b_listener(peripherals: UartBPins) {
             continue;
         };
 
+        info!("uart_b received data: {=[u8]}", read_buffer);
+
         let request: UartRequest = from_bytes(&read_buffer).unwrap();
         let response: UartResponse = handle_uart_request(request).await;
 
@@ -152,7 +169,7 @@ async fn handle_uart_request(request: UartRequest) -> UartResponse {
         }
         UartRequest::Query(UartQuery::Fetch) => {
             info!("Received UartQuery::Fetch");
-            UartResponse::Report { rpm: 0 }
+            UartResponse::Report { rpm: 4000 }
         }
     }
 }
