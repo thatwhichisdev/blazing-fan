@@ -7,11 +7,12 @@ use ariel_os::{
     gpio::{Input, Pull},
     hal,
 };
+use blazing_fan_proto::{
+    UART_REQ_MAX_SIZE, UART_RES_MAX_SIZE, UartCommand, UartQuery, UartRequest, UartResponse,
+};
 use defmt::{error, info};
 use fugit::Rate;
-use postcard::experimental::max_size::MaxSize;
 use postcard::{from_bytes, to_slice};
-use serde::{Deserialize, Serialize};
 
 use crate::pins::{ButtonPin, EmcI2C, Peripherals, UartAPins, UartBPins};
 
@@ -59,31 +60,6 @@ async fn button_listener(peripherals: ButtonPin) {
         info!("Button state: {}", button.is_low());
     }
 }
-
-#[derive(Serialize, Deserialize, Debug, Eq, PartialEq, MaxSize)]
-enum UartCommand {
-    Update { tmp: u8 },
-}
-
-#[derive(Serialize, Deserialize, Debug, Eq, PartialEq, MaxSize)]
-enum UartQuery {
-    Fetch,
-}
-
-#[derive(Serialize, Deserialize, Debug, Eq, PartialEq, MaxSize)]
-enum UartRequest {
-    Command(UartCommand),
-    Query(UartQuery),
-}
-
-#[derive(Serialize, Deserialize, Debug, Eq, PartialEq, MaxSize)]
-enum UartResponse {
-    Empty,
-    Report { rpm: u16 },
-}
-
-const UART_REQ_MAX_SIZE: usize = UartRequest::POSTCARD_MAX_SIZE;
-const UART_RES_MAX_SIZE: usize = UartResponse::POSTCARD_MAX_SIZE;
 
 #[ariel_os::task(autostart, peripherals)]
 async fn uart_a_listener(peripherals: UartAPins) {
