@@ -21,6 +21,8 @@ use ariel_os::{
     asynch::Spawner,
     gpio::{Input, Level, Output},
     hal::{i2c, uart},
+    reexports::embassy_time::Ticker,
+    time::Duration,
 };
 use blazing_fan_proto::{UART_REQ_MAX_SIZE, UART_RES_MAX_SIZE};
 use embassy_rp::adc;
@@ -35,7 +37,7 @@ static FAN: StaticCell<
 static FAN_READY: Watch<
     CriticalSectionRawMutex,
     &'static Mutex<CriticalSectionRawMutex, Fan<RP2040Adapter, Emc2101Adapter, FanPowerAdapter>>,
-    3,
+    4,
 > = Watch::new();
 
 #[ariel_os::spawner(autostart, peripherals)]
@@ -59,6 +61,8 @@ fn boot(spawner: Spawner, peripherals: Peripherals) {
     spawner
         .spawn(uart_b_adapter_task(peripherals.uart_b_pins))
         .unwrap();
+
+    spawner.spawn(ticker()).unwrap();
 }
 
 #[ariel_os::task]
@@ -87,15 +91,28 @@ async fn core_task(pico_pins: PicoPins, emc_pins: EmcPins, fan_pwr_pin: FanPower
 
     let fan_signal_sender = FAN_READY.dyn_sender();
     fan_signal_sender.send(fan);
+}
 
-    let mut guard = fan.lock().await;
-    guard.start().await;
-    drop(guard);
+#[ariel_os::task]
+async fn ticker() {
+    defmt::info!("Booting ticker");
+
+    let mut fan_signal_rcv = FAN_READY.dyn_receiver().unwrap();
+    let fan = fan_signal_rcv.get().await;
+
+    let mut ticker = Ticker::every(Duration::from_secs(1));
+
+    loop {
+        ticker.next().await;
+
+        let mut guard = fan.lock().await;
+        guard.tick().await;
+    }
 }
 
 #[ariel_os::task]
 async fn button_adapter_task(pins: ButtonPin) {
-    defmt::info!("Booting external button");
+    defmt::info!("Booting button listener");
 
     let mut fan_signal_rcv = FAN_READY.dyn_receiver().unwrap();
     let fan = fan_signal_rcv.get().await;

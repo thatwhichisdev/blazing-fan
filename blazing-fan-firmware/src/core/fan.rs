@@ -1,4 +1,5 @@
 use blazing_fan_proto::{UartCommand, UartQuery, UartRequest, UartResponse};
+use bounded_integer::BoundedU8;
 
 use crate::ports::{
     button_port::ButtonPort,
@@ -7,6 +8,12 @@ use crate::ports::{
     rp2040_port::RP2040Port,
     uart_port::{UartError, UartPort},
 };
+
+enum Mode {
+    Auto,
+    Full,
+    Idle,
+}
 
 pub struct Fan<B, E, P>
 where
@@ -17,6 +24,7 @@ where
     brd: B,
     emc: E,
     pwr: P,
+    mode: Mode,
 }
 
 impl<B, E, P> Fan<B, E, P>
@@ -26,14 +34,38 @@ where
     P: FanPowerPort,
 {
     pub fn new(brd: B, emc: E, pwr: P) -> Self {
-        Self { brd, emc, pwr }
+        Self {
+            brd,
+            emc,
+            pwr,
+            mode: Mode::Auto,
+        }
     }
 
-    pub async fn start(&mut self) {
-        self.pwr.pwr_on();
-        self.brd.led_on();
-        self.brd.board_tmp().unwrap();
-        self.brd.board_sys_voltage().unwrap();
+    pub async fn tick(&mut self) {
+        match self.mode {
+            Mode::Auto => {
+                self.pwr.pwr_on();
+                self.brd.led_on();
+                // todo: implement logic for automatically detecting fan speed
+            }
+            Mode::Full => {
+                self.pwr.pwr_on();
+                self.brd.led_on();
+                self.emc
+                    .set_fan_power(BoundedU8::<0, 63>::new(63).unwrap())
+                    .await
+                    .unwrap();
+            }
+            Mode::Idle => {
+                self.pwr.pwr_off();
+                self.brd.led_off();
+                self.emc
+                    .set_fan_power(BoundedU8::<0, 63>::new(0).unwrap())
+                    .await
+                    .unwrap();
+            }
+        }
     }
 }
 
@@ -86,7 +118,11 @@ where
     P: FanPowerPort,
 {
     async fn btn_pressed(&mut self) {
-        defmt::info!("CORE: Button pressed");
-        // todo: to change state of the fan mode (looping thru modes)
+        defmt::info!("CORE: Changing mode");
+        self.mode = match self.mode {
+            Mode::Auto => Mode::Full,
+            Mode::Full => Mode::Idle,
+            Mode::Idle => Mode::Auto,
+        };
     }
 }

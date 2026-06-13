@@ -21,11 +21,6 @@ impl Emc2101Adapter {
             .await
             .unwrap();
 
-        defmt::info!("EMC2101: Set fan power to 63/63");
-        emc.set_fan_power(<BoundedU8<0, 63>>::new(63).unwrap())
-            .await
-            .unwrap();
-
         Self { emc }
     }
 }
@@ -48,6 +43,13 @@ impl Emc2101Port for Emc2101Adapter {
     async fn fan_tmp_internal(&mut self) -> Result<i8, Emc2101Error> {
         match self.emc.temp_internal().await {
             Ok(tmp) => Ok(tmp),
+            Err(_) => Err(Emc2101Error::Empty),
+        }
+    }
+
+    async fn set_fan_power(&mut self, val: BoundedU8<0, 63>) -> Result<(), Emc2101Error> {
+        match self.emc.set_fan_power(val).await {
+            Ok(_) => Ok(()),
             Err(_) => Err(Emc2101Error::Empty),
         }
     }
