@@ -5,7 +5,7 @@ imports:
     dldir: ariel-os
 
 apps:
-  - name: blazing-fan
+  - name: blazing-fan-firmware
     context:
       - rp2040
     selects:

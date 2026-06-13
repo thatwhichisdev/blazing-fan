@@ -1,20 +1,20 @@
 [language-server.rust-analyzer.config.cargo]
 features = [
-    "ariel-os/panic-printing",
-    "ariel-os/defmt-rtt",
-    "ariel-os/defmt",
-    "ariel-os/debug-channel",
-    "ariel-os/single-core",
-    "ariel-os/executor-interrupt",
-    "ariel-os/semihosting",
+  "ariel-os/panic-printing",
+  "ariel-os/defmt-rtt",
+  "ariel-os/defmt",
+  "ariel-os/debug-channel",
+  "ariel-os/single-core",
+  "ariel-os/executor-interrupt",
+  "ariel-os/semihosting",
 ]
 
 [language-server.rust-analyzer.config.cargo.buildScripts]
 overrideCommand = [
-    "cargo",
-    "check",
-    "--features=ariel-os/panic-printing,ariel-os/defmt-rtt,ariel-os/defmt,ariel-os/debug-channel,ariel-os/single-core,ariel-os/executor-interrupt,ariel-os/semihosting",
-    "--message-format=json",
+  "cargo",
+  "check",
+  "--features=ariel-os/panic-printing,ariel-os/defmt-rtt,ariel-os/defmt,ariel-os/debug-channel,ariel-os/single-core,ariel-os/executor-interrupt,ariel-os/semihosting",
+  "--message-format=json",
 ]
 
 [language-server.rust-analyzer.config.cargo.extraEnv]
@@ -27,7 +27,7 @@ CONFIG_EXECUTOR_STACKSIZE = "8192"
 CONFIG_ISR_STACKSIZE = "2048"
 CONFIG_WIFI_NETWORK = "test-wifi"
 CONFIG_WIFI_PASSWORD = "test-password"
-DEFMT_LOG = "info,"
+DEFMT_LOG = "trace"
 OPENOCD_ARGS = "-f interface/cmsis-dap.cfg -f target/rp2040.cfg"
 RUSTFLAGS = '--cfg context="rpi-pico" --cfg context="rp2040" --cfg context="rp" --cfg context="ariel-os" --cfg context="default" --cfg stable -Cembed-bitcode=yes -Clto=fat -Ccodegen-units=1 -Clink-arg=-Tdefmt.x --cfg armv6m -Clink-arg=--nmagic -Clink-arg=--no-eh-frame-hdr -Clink-arg=-Tlinkme.x -Clink-arg=-Tlink.x -Clink-arg=-Teheap.x -Clink-arg=-Tdevice.x -Clink-arg=-Tisr_stack.x --cfg context="cortex-m" --cfg context="cortex-m0-plus" -Clink-arg=-Tlink-rp.x'
 SCRIPTS = "./scripts"
@@ -35,7 +35,9 @@ SCRIPTS = "./scripts"
 [language-server.rust-analyzer.config.check]
 allTargets = false
 command = "clippy"
-extraArgs = ["--features=ariel-os/panic-printing,ariel-os/defmt-rtt,ariel-os/defmt,ariel-os/debug-channel,ariel-os/single-core,ariel-os/executor-interrupt,ariel-os/semihosting"]
+extraArgs = [
+  "--features=ariel-os/panic-printing,ariel-os/defmt-rtt,ariel-os/defmt,ariel-os/debug-channel,ariel-os/single-core,ariel-os/executor-interrupt,ariel-os/semihosting",
+]
 
 [language-server.rust-analyzer.config.files]
 watcher = "server"
