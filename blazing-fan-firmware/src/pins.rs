@@ -33,14 +33,12 @@ define_peripherals!(PixelPins {
 define_peripherals!(FanPowerPin { pwr: PIN_16 });
 
 #[cfg(context = "rp2040")]
-define_peripherals!(LedPin { led: PIN_25 });
-
-#[cfg(context = "rp2040")]
 define_peripherals!(PicoPins {
     adc: ADC,
     adc_tmp: ADC_TEMP_SENSOR,
     usb: PIN_24,
     vsys: PIN_29,
+    led: PIN_25,
 });
 
 #[cfg(context = "rp2040")]
@@ -48,6 +46,7 @@ group_peripherals!(Peripherals {
     btn_pin: ButtonPin,
     emc_pins: EmcPins,
     fan_pwr_pin: FanPowerPin,
+    pico_pins: PicoPins,
     pixel_pins: PixelPins,
     uart_a_pins: UartAPins,
     uart_b_pins: UartBPins,

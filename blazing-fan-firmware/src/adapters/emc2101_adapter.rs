@@ -1,5 +1,6 @@
 use crate::ports::emc2101_port::{Emc2101Error, Emc2101Port};
 use ariel_os::hal::i2c::controller::I2c;
+use bounded_integer::BoundedU8;
 use emc2101::AsyncEMC2101;
 use fugit::Rate;
 
@@ -17,6 +18,11 @@ impl Emc2101Adapter {
 
         defmt::info!("EMC2101: Set pulse width modulation to 25kHz");
         emc.set_fan_pwm(Rate::<u32, _, _>::kHz(25), false)
+            .await
+            .unwrap();
+
+        defmt::info!("EMC2101: Set fan power to 63/63");
+        emc.set_fan_power(<BoundedU8<0, 63>>::new(63).unwrap())
             .await
             .unwrap();
 

@@ -10,6 +10,7 @@ use crate::{
     adapters::{
         button_adapter::ButtonAdapter,
         emc2101_adapter::Emc2101Adapter,
+        fan_power_adapter::FanPowerAdapter,
         uart_adapter::{UartAdapter, UartName},
     },
     core::fan::Fan,
@@ -25,10 +26,12 @@ use embassy_sync::{blocking_mutex::raw::CriticalSectionRawMutex, mutex::Mutex, w
 use static_cell::StaticCell;
 
 /// Fan should be wrapped in Mutex since we're going to share it across multiple tasks
-static FAN: StaticCell<Mutex<CriticalSectionRawMutex, Fan<Emc2101Adapter>>> = StaticCell::new();
+static FAN: StaticCell<Mutex<CriticalSectionRawMutex, Fan<Emc2101Adapter, FanPowerAdapter>>> =
+    StaticCell::new();
+
 static FAN_READY: Watch<
     CriticalSectionRawMutex,
-    &'static Mutex<CriticalSectionRawMutex, Fan<Emc2101Adapter>>,
+    &'static Mutex<CriticalSectionRawMutex, Fan<Emc2101Adapter, FanPowerAdapter>>,
     3,
 > = Watch::new();
 
@@ -55,17 +58,21 @@ fn boot(spawner: Spawner, peripherals: Peripherals) {
 async fn core_task(emc_pins: EmcPins, fan_pwr_pin: FanPowerPin) {
     defmt::info!("Booting firmware");
 
-    let _fan_power = Output::new(fan_pwr_pin.pwr, Level::High);
+    let fan_power_output = Output::new(fan_pwr_pin.pwr, Level::High);
+    let fan_power_adapter = FanPowerAdapter::new(fan_power_output);
 
     let i2c_config = i2c::controller::Config::default();
     let i2c0 = i2c::controller::I2C0::new(emc_pins.sda, emc_pins.scl, i2c_config);
-
     let emc2101_adapter = Emc2101Adapter::new(i2c0).await;
 
-    let fan: &'static _ = FAN.init(Mutex::new(Fan::new(emc2101_adapter)));
+    let fan: &'static _ = FAN.init(Mutex::new(Fan::new(emc2101_adapter, fan_power_adapter)));
 
     let fan_signal_sender = FAN_READY.dyn_sender();
     fan_signal_sender.send(fan);
+
+    let mut guard = fan.lock().await;
+    guard.start().await;
+    drop(guard);
 }
 
 #[ariel_os::task]
