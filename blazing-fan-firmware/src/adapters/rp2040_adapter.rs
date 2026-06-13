@@ -27,27 +27,23 @@ impl<'a> RP2040Adapter<'a> {
 }
 
 impl<'a> RP2040Port for RP2040Adapter<'a> {
-    fn board_tmp(&mut self) -> Result<f32, crate::ports::rp2040_port::RP2040Error> {
+    fn board_tmp(&mut self) -> Result<i8, crate::ports::rp2040_port::RP2040Error> {
         let adc_raw = self.adc.blocking_read(&mut self.tmp_ch).unwrap();
         let adc_voltage = adc_raw as f32 * 3.3 / 4096.0;
-        let temp = 27.0 - (adc_voltage - 0.706) / 0.001721;
-        let sign = if temp < 0.0 { -1.0 } else { 1.0 };
-        let rounded_temp_x10: i16 = ((temp * 10.0) + 0.5 * sign) as i16;
-        let temp = (rounded_temp_x10 as f32) / 10.0;
+        let temp_c = 27.0 - (adc_voltage - 0.706) / 0.001721;
 
-        defmt::debug!("temp adc_raw {=u16}", adc_raw);
-        defmt::debug!("temp adc_voltage {=f32}", adc_voltage);
-        defmt::info!("tmp {=f32}", temp);
+        let temp_c_i8 = if temp_c < 0.0 {
+            (temp_c - 0.5) as i8
+        } else {
+            (temp_c + 0.5) as i8
+        };
 
-        Ok(temp)
+        Ok(temp_c_i8)
     }
 
     fn board_sys_voltage(&mut self) -> Result<f32, crate::ports::rp2040_port::RP2040Error> {
         let adc_raw = self.adc.blocking_read(&mut self.vsys_ch).unwrap();
         let adc_voltage = (adc_raw as f32) * 3.3 * 3.0 / 4096.0;
-
-        defmt::debug!("vsys adc_raw {=u16}", adc_raw);
-        defmt::info!("vsys adc_voltage {=f32}", adc_voltage);
 
         Ok(adc_voltage)
     }

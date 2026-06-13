@@ -37,4 +37,18 @@ impl Emc2101Port for Emc2101Adapter {
             Err(_) => Err(Emc2101Error::Empty),
         }
     }
+
+    async fn fan_tmp_external(&mut self) -> Result<i8, Emc2101Error> {
+        match self.emc.temp_external().await {
+            Ok(tmp) => Ok(tmp),
+            Err(_) => Err(Emc2101Error::Empty),
+        }
+    }
+
+    async fn fan_tmp_internal(&mut self) -> Result<i8, Emc2101Error> {
+        match self.emc.temp_internal().await {
+            Ok(tmp) => Ok(tmp),
+            Err(_) => Err(Emc2101Error::Empty),
+        }
+    }
 }

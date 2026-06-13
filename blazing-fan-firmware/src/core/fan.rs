@@ -47,18 +47,32 @@ where
         match request {
             UartRequest::Command(command) => match command {
                 UartCommand::Update { tmp } => {
-                    defmt::info!("CORE: Received command - Update [tmp: {=u8}]", tmp);
+                    defmt::debug!("CORE: Received command - Update [tmp: {=u8}]", tmp);
 
-                    Ok(UartResponse::Empty)
+                    Ok(UartResponse::Ok)
                 }
             },
             UartRequest::Query(query) => match query {
-                UartQuery::FanGetRpm => {
-                    defmt::info!("CORE: Received query - FanGetRpm");
+                UartQuery::FanGetStatus => {
+                    defmt::debug!("CORE: Received query - FanGetStatus");
 
-                    let rpm = self.emc.fan_rpm().await.unwrap();
+                    let fan_rpm = self.emc.fan_rpm().await.unwrap();
+                    let fan_tmp_internal = self.emc.fan_tmp_internal().await.unwrap();
+                    let fan_tmp_external = self.emc.fan_tmp_external().await.unwrap();
+                    let brd_tmp = self.brd.board_tmp().unwrap();
+                    let brd_vol = self.brd.board_sys_voltage().unwrap();
 
-                    Ok(UartResponse::FanRpm { rpm })
+                    let uart_response = UartResponse::Status {
+                        fan_rpm,
+                        fan_tmp_internal,
+                        fan_tmp_external,
+                        brd_tmp,
+                        brd_vol,
+                    };
+
+                    defmt::info!("CORE: Status [{:?}]", defmt::Debug2Format(&uart_response));
+
+                    Ok(uart_response)
                 }
             },
         }

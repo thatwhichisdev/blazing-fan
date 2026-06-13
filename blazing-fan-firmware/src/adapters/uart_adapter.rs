@@ -84,8 +84,10 @@ where
             let mut guard = self.port.lock().await;
 
             match guard.request(request).await {
-                Ok(UartResponse::Empty) => continue,
-                Ok(response @ UartResponse::FanRpm { .. }) => {
+                Ok(UartResponse::Ok) => continue,
+                // todo: figure out a way to encode errors
+                Ok(UartResponse::Err) => continue,
+                Ok(response @ UartResponse::Status { .. }) => {
                     let data = postcard::to_slice(&response, self.tx_buf).unwrap();
                     self.uart.write(data).await.unwrap();
                     self.uart.flush().await.unwrap();

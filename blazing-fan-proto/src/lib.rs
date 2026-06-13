@@ -10,7 +10,7 @@ pub enum UartCommand {
 
 #[derive(Serialize, Deserialize, Debug, Eq, PartialEq, MaxSize)]
 pub enum UartQuery {
-    FanGetRpm,
+    FanGetStatus,
 }
 
 #[derive(Serialize, Deserialize, Debug, Eq, PartialEq, MaxSize)]
@@ -19,10 +19,17 @@ pub enum UartRequest {
     Query(UartQuery),
 }
 
-#[derive(Serialize, Deserialize, Debug, Eq, PartialEq, MaxSize)]
+#[derive(Serialize, Deserialize, Debug, MaxSize)]
 pub enum UartResponse {
-    Empty,
-    FanRpm { rpm: u16 },
+    Ok,
+    Err,
+    Status {
+        fan_rpm: u16,
+        fan_tmp_internal: i8,
+        fan_tmp_external: i8,
+        brd_tmp: i8,
+        brd_vol: f32,
+    },
 }
 
 pub const UART_REQ_MAX_SIZE: usize = UartRequest::POSTCARD_MAX_SIZE;
