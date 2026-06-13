@@ -1,5 +1,6 @@
 use blazing_fan_proto::{UartCommand, UartQuery, UartRequest, UartResponse};
 use bounded_integer::BoundedU8;
+use smart_leds::RGB8;
 
 use crate::ports::{
     button_port::ButtonPort,
@@ -7,6 +8,7 @@ use crate::ports::{
     fan_power_port::FanPowerPort,
     rp2040_port::RP2040Port,
     uart_port::{UartError, UartPort},
+    ws2812_port::WS2812Port,
 };
 
 enum Mode {
@@ -15,29 +17,33 @@ enum Mode {
     Idle,
 }
 
-pub struct Fan<B, E, P>
+pub struct Fan<B, E, P, W>
 where
     B: RP2040Port,
     E: Emc2101Port,
     P: FanPowerPort,
+    W: WS2812Port,
 {
     brd: B,
     emc: E,
     pwr: P,
+    pxl: W,
     mode: Mode,
 }
 
-impl<B, E, P> Fan<B, E, P>
+impl<B, E, P, W> Fan<B, E, P, W>
 where
     B: RP2040Port,
     E: Emc2101Port,
     P: FanPowerPort,
+    W: WS2812Port,
 {
-    pub fn new(brd: B, emc: E, pwr: P) -> Self {
+    pub fn new(brd: B, emc: E, pwr: P, pxl: W) -> Self {
         Self {
             brd,
             emc,
             pwr,
+            pxl,
             mode: Mode::Auto,
         }
     }
@@ -47,11 +53,13 @@ where
             Mode::Auto => {
                 self.pwr.pwr_on();
                 self.brd.led_on();
+                self.pxl.set_rgb8([RGB8::new(128, 0, 0); 2]).await;
                 // todo: implement logic for automatically detecting fan speed
             }
             Mode::Full => {
                 self.pwr.pwr_on();
                 self.brd.led_on();
+                self.pxl.set_rgb8([RGB8::new(0, 0, 128); 2]).await;
                 self.emc
                     .set_fan_power(BoundedU8::<0, 63>::new(63).unwrap())
                     .await
@@ -60,6 +68,7 @@ where
             Mode::Idle => {
                 self.pwr.pwr_off();
                 self.brd.led_off();
+                self.pxl.set_rgb8([RGB8::new(0, 0, 0); 2]).await;
                 self.emc
                     .set_fan_power(BoundedU8::<0, 63>::new(0).unwrap())
                     .await
@@ -69,11 +78,12 @@ where
     }
 }
 
-impl<B, E, P> UartPort for Fan<B, E, P>
+impl<B, E, P, W> UartPort for Fan<B, E, P, W>
 where
     B: RP2040Port,
     E: Emc2101Port,
     P: FanPowerPort,
+    W: WS2812Port,
 {
     async fn request(&mut self, request: UartRequest) -> Result<UartResponse, UartError> {
         match request {
@@ -111,11 +121,12 @@ where
     }
 }
 
-impl<B, E, P> ButtonPort for Fan<B, E, P>
+impl<B, E, P, W> ButtonPort for Fan<B, E, P, W>
 where
     B: RP2040Port,
     E: Emc2101Port,
     P: FanPowerPort,
+    W: WS2812Port,
 {
     async fn btn_pressed(&mut self) {
         defmt::info!("CORE: Changing mode");

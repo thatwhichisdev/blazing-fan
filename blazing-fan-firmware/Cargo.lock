@@ -754,6 +754,7 @@ dependencies = [
  "heapless 0.7.17",
  "postcard",
  "serde",
+ "smart-leds",
  "static_cell",
  "thiserror",
 ]

@@ -22,7 +22,7 @@ define_peripherals!(EmcPins {
 });
 
 #[cfg(context = "rp2040")]
-define_peripherals!(PixelPins {
+define_peripherals!(WS2812Pins {
     pio: PIO0,
     led: PIN_15,
     dma: DMA_CH0,
@@ -45,7 +45,7 @@ group_peripherals!(Peripherals {
     emc_pins: EmcPins,
     fan_pwr_pin: FanPowerPin,
     pico_pins: PicoPins,
-    pixel_pins: PixelPins,
+    ws_pins: WS2812Pins,
     uart_a_pins: UartAPins,
     uart_b_pins: UartBPins,
 });

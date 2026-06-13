@@ -26,6 +26,7 @@ blazing-fan-proto = { path = "../blazing-fan-proto" }
 emc2101 = { version = "2.0.1", features = ["async"] }
 fugit = "0.3.7"
 bounded-integer = "0.6.0"
+smart-leds = "0.4.0"
 
 thiserror = { version = "2.0.18", default-features = false }
 heapless = { version = "0.7.0", features = ["defmt"] }
