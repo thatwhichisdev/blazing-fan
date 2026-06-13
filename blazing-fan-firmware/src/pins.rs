@@ -1,4 +1,3 @@
-#[cfg(context = "rp2040")]
 use ariel_os::hal::{define_peripherals, group_peripherals, peripherals};
 
 #[cfg(context = "rp2040")]
@@ -36,7 +35,6 @@ define_peripherals!(FanPowerPin { pwr: PIN_16 });
 define_peripherals!(PicoPins {
     adc: ADC,
     adc_tmp: ADC_TEMP_SENSOR,
-    usb: PIN_24,
     vsys: PIN_29,
     led: PIN_25,
 });

@@ -745,6 +745,7 @@ dependencies = [
  "bounded-integer",
  "defmt 1.1.0",
  "defmt-rtt",
+ "embassy-rp",
  "embassy-sync 0.7.2",
  "embedded-hal-async",
  "embedded-io-async 0.6.1",

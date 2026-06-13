@@ -31,10 +31,10 @@ pkgs.mkShell {
     nerd-fonts.jetbrains-mono
   ];
 
-  STARSHIP_CONFIG = "./.starship/starship.toml";
+  STARSHIP_CONFIG = "${./.starship/starship.toml}";
 
   shellHook = ''
     unset NIX_ENFORCE_PURITY
-    exec nu --config ./.nu/config.nu
+    exec nu --config ${./.nu/config.nu}
   '';
 }

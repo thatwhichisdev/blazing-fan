@@ -4,34 +4,42 @@ use crate::ports::{
     button_port::ButtonPort,
     emc2101_port::Emc2101Port,
     fan_power_port::FanPowerPort,
+    rp2040_port::RP2040Port,
     uart_port::{UartError, UartPort},
 };
 
-pub struct Fan<E, P>
+pub struct Fan<B, E, P>
 where
+    B: RP2040Port,
     E: Emc2101Port,
     P: FanPowerPort,
 {
+    brd: B,
     emc: E,
     pwr: P,
 }
 
-impl<E, P> Fan<E, P>
+impl<B, E, P> Fan<B, E, P>
 where
+    B: RP2040Port,
     E: Emc2101Port,
     P: FanPowerPort,
 {
-    pub fn new(emc: E, pwr: P) -> Self {
-        Fan { emc, pwr }
+    pub fn new(brd: B, emc: E, pwr: P) -> Self {
+        Self { brd, emc, pwr }
     }
 
     pub async fn start(&mut self) {
         self.pwr.pwr_on();
+        self.brd.led_on();
+        self.brd.board_tmp().unwrap();
+        self.brd.board_sys_voltage().unwrap();
     }
 }
 
-impl<E, P> UartPort for Fan<E, P>
+impl<B, E, P> UartPort for Fan<B, E, P>
 where
+    B: RP2040Port,
     E: Emc2101Port,
     P: FanPowerPort,
 {
@@ -57,8 +65,9 @@ where
     }
 }
 
-impl<E, P> ButtonPort for Fan<E, P>
+impl<B, E, P> ButtonPort for Fan<B, E, P>
 where
+    B: RP2040Port,
     E: Emc2101Port,
     P: FanPowerPort,
 {
