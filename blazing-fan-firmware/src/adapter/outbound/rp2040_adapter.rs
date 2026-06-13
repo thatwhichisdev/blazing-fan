@@ -1,7 +1,7 @@
 use ariel_os::gpio::Output;
 use embassy_rp::adc::{Adc, Blocking, Channel};
 
-use crate::ports::rp2040_port::RP2040Port;
+use crate::core::port::outbound::rp2040_port::{RP2040Error, RP2040Port};
 
 pub struct RP2040Adapter<'a> {
     adc: Adc<'a, Blocking>,
@@ -27,7 +27,7 @@ impl<'a> RP2040Adapter<'a> {
 }
 
 impl<'a> RP2040Port for RP2040Adapter<'a> {
-    fn board_tmp(&mut self) -> Result<i8, crate::ports::rp2040_port::RP2040Error> {
+    fn board_tmp(&mut self) -> Result<i8, RP2040Error> {
         let adc_raw = self.adc.blocking_read(&mut self.tmp_ch).unwrap();
         let adc_voltage = adc_raw as f32 * 3.3 / 4096.0;
         let temp_c = 27.0 - (adc_voltage - 0.706) / 0.001721;
@@ -41,7 +41,7 @@ impl<'a> RP2040Port for RP2040Adapter<'a> {
         Ok(temp_c_i8)
     }
 
-    fn board_sys_voltage(&mut self) -> Result<f32, crate::ports::rp2040_port::RP2040Error> {
+    fn board_sys_voltage(&mut self) -> Result<f32, RP2040Error> {
         let adc_raw = self.adc.blocking_read(&mut self.vsys_ch).unwrap();
         let adc_voltage = (adc_raw as f32) * 3.3 * 3.0 / 4096.0;
 

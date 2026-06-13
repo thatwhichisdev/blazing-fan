@@ -1,6 +1,6 @@
 use ariel_os::gpio::Output;
 
-use crate::ports::fan_power_port::FanPowerPort;
+use crate::core::port::outbound::fan_power_port::FanPowerPort;
 
 pub struct FanPowerAdapter<'a> {
     pwr: Output<'a>,

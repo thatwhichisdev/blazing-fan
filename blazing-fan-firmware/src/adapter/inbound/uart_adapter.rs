@@ -1,4 +1,4 @@
-use crate::ports::uart_port::UartPort;
+use crate::core::port::inbound::uart_port::UartPort;
 use ariel_os::hal::uart;
 use blazing_fan_proto::{UART_REQ_MAX_SIZE, UART_RES_MAX_SIZE, UartRequest, UartResponse};
 use defmt::{error, info};

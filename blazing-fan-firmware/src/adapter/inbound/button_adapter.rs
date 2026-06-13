@@ -1,6 +1,7 @@
-use crate::ports::button_port::ButtonPort;
 use ariel_os::gpio::IntEnabledInput;
 use embassy_sync::{blocking_mutex::raw::CriticalSectionRawMutex, mutex::Mutex};
+
+use crate::core::port::inbound::button_port::ButtonPort;
 
 pub struct ButtonAdapter<'a, P>
 where

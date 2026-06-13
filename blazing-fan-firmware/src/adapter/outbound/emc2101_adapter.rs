@@ -1,4 +1,4 @@
-use crate::ports::emc2101_port::{Emc2101Error, Emc2101Port};
+use crate::core::port::outbound::emc2101_port::{Emc2101Error, Emc2101Port};
 use ariel_os::hal::i2c::controller::I2c;
 use bounded_integer::BoundedU8;
 use emc2101::AsyncEMC2101;
@@ -26,7 +26,7 @@ impl Emc2101Adapter {
 }
 
 impl Emc2101Port for Emc2101Adapter {
-    async fn fan_rpm(&mut self) -> Result<u16, crate::ports::emc2101_port::Emc2101Error> {
+    async fn fan_rpm(&mut self) -> Result<u16, Emc2101Error> {
         match self.emc.fan_rpm().await {
             Ok(rpm) => Ok(rpm),
             Err(_) => Err(Emc2101Error::Empty),

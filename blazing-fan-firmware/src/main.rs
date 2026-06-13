@@ -1,21 +1,22 @@
 #![no_main]
 #![no_std]
 
-mod adapters;
+mod adapter;
 mod core;
 mod pins;
-mod ports;
 
 use crate::{
-    adapters::{
-        button_adapter::ButtonAdapter,
-        emc2101_adapter::Emc2101Adapter,
-        fan_power_adapter::FanPowerAdapter,
-        rp2040_adapter::RP2040Adapter,
-        uart_adapter::{UartAdapter, UartName},
-        ws2812_adapter::WS2812Adapter,
+    adapter::{
+        inbound::{
+            button_adapter::ButtonAdapter,
+            uart_adapter::{UartAdapter, UartName},
+        },
+        outbound::{
+            emc2101_adapter::Emc2101Adapter, fan_power_adapter::FanPowerAdapter,
+            rp2040_adapter::RP2040Adapter, ws2812_adapter::WS2812Adapter,
+        },
     },
-    core::fan::Fan,
+    core::Fan,
     pins::{
         ButtonPin, EmcPins, FanPowerPin, Peripherals, PicoPins, UartAPins, UartBPins, WS2812Pins,
     },

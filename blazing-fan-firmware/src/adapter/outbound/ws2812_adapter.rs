@@ -1,7 +1,7 @@
 use embassy_rp::{peripherals::PIO0, pio_programs::ws2812::PioWs2812};
 use smart_leds::RGB8;
 
-use crate::ports::ws2812_port::WS2812Port;
+use crate::core::port::outbound::ws2812_port::WS2812Port;
 
 pub struct WS2812Adapter<'a> {
     pxl: PioWs2812<'a, PIO0, 0, 2>,
