@@ -1,22 +1,35 @@
-use blazing_fan_proto::{UART_RES_MAX_SIZE, UartResponse};
+use std::time::Duration;
+
+use blazing_fan_proto::{UartQuery, UartRequest};
 use serial2_tokio::SerialPort;
-use tokio::io::AsyncReadExt;
+use tokio::time::interval;
+
+use crate::{
+    adapter::outbound::uart_adapter::UartAdapter, core::port::outbound::uart_port::UartPort,
+};
+
+mod adapter;
+mod config;
+mod core;
 
 #[tokio::main]
 async fn main() -> color_eyre::Result<()> {
-    let mut port = SerialPort::open("/dev/ttyACM5", 115200).unwrap();
+    let config = config::load_config()?;
+
+    let port = SerialPort::open(config.uart.path, config.uart.baud_rate).unwrap();
+    let mut uart_adapter = UartAdapter::new(port);
+
+    let mut ticker = interval(Duration::from_millis(config.polling.interval_ms));
 
     loop {
-        let mut rx_buf = [0u8; UART_RES_MAX_SIZE];
-        let Ok(_size) = port.read_exact(&mut rx_buf).await else {
-            continue;
-        };
+        ticker.tick().await;
 
-        let response = postcard::from_bytes::<UartResponse>(&rx_buf[..]).unwrap();
-        match response {
-            UartResponse::Ok => todo!(),
-            UartResponse::Err => todo!(),
-            UartResponse::Status { .. } => todo!(),
+        match uart_adapter
+            .request(UartRequest::Query(UartQuery::FanGetStatus))
+            .await
+        {
+            Ok(_) => todo!(),
+            Err(_) => todo!(),
         }
     }
 }
