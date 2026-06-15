@@ -1,13 +1,16 @@
 use std::time::Duration;
 
-use blazing_fan_proto::{UartQuery, UartRequest};
 use serial2_tokio::SerialPort;
+use sysinfo::{Components, System};
 use tokio::time::interval;
 use zbus::conn::Builder;
 
 use crate::{
-    adapter::{inbound::dbus_adapter::DbusAdapter, outbound::uart_adapter::UartAdapter},
-    core::port::outbound::uart_port::UartPort,
+    adapter::{
+        inbound::dbus_adapter::DbusAdapter,
+        outbound::{otel_adapter::OtelAdapter, uart_adapter::UartAdapter},
+    },
+    core::port::outbound::otel_port::OtelPort,
 };
 
 mod adapter;
@@ -18,11 +21,14 @@ mod core;
 async fn main() -> color_eyre::Result<()> {
     let config = config::load_config()?;
 
-    // Bootstrap uart adapter
-    let port = SerialPort::open(config.uart.path, config.uart.baud_rate).unwrap();
-    let mut uart_adapter = UartAdapter::new(port);
+    // Bootstrap outbound otel adapter
+    let otel_adapter = OtelAdapter::new(config.otel)?;
 
-    // Boostrap dbus adapter
+    // Bootstrap outbound uart adapter
+    let port = SerialPort::open(config.uart.path, config.uart.baud_rate).unwrap();
+    let _uart_adapter = UartAdapter::new(port);
+
+    // Boostrap inbound dbus adapter
     let _connection = Builder::session()?
         .name("dev.thatwhichis.daemon")?
         .serve_at("/dev/thatwhichis/daemon", DbusAdapter)?
@@ -30,16 +36,33 @@ async fn main() -> color_eyre::Result<()> {
         .await?;
 
     let mut ticker = interval(Duration::from_millis(config.polling.interval_ms));
+    let mut sys = System::new_all();
+    let mut components = Components::new_with_refreshed_list();
+    let cpu_tmp = components
+        .iter_mut()
+        .find(|c| c.id() == Some("hwmon0_1"))
+        .unwrap();
 
     loop {
-        ticker.tick().await;
+        sys.refresh_all();
+        cpu_tmp.refresh();
 
-        match uart_adapter
-            .request(UartRequest::Query(UartQuery::FanGetStatus))
-            .await
-        {
-            Ok(_) => todo!(),
-            Err(_) => todo!(),
-        }
+        otel_adapter.record_cpu_load(sys.global_cpu_usage() as f64);
+        otel_adapter.record_mem_usg(sys.used_memory());
+
+        cpu_tmp.temperature().map(|tmp| {
+            otel_adapter.record_cpu_tmp(tmp as f64);
+            tracing::info!("cpu temp: {}°C", tmp);
+        });
+
+        // match uart_adapter
+        //     .request(UartRequest::Query(UartQuery::FanGetStatus))
+        //     .await
+        // {
+        //     Ok(_) => todo!(),
+        //     Err(_) => todo!(),
+        // }
+
+        ticker.tick().await;
     }
 }

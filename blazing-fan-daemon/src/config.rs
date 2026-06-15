@@ -27,6 +27,9 @@ pub struct PollingConfig {
 #[serde(deny_unknown_fields)]
 pub struct OtelConfig {
     pub enabled: bool,
+    pub service_name: String,
+    pub endpoint: String,
+    pub token: String,
 }
 
 pub fn load_config() -> Result<AppConfig, ConfigError> {
@@ -39,14 +42,6 @@ pub fn load_config() -> Result<AppConfig, ConfigError> {
         .build()?;
 
     let app_config: AppConfig = config.try_deserialize()?;
-
-    println!("Config loaded successfully");
-    println!("UART path: {}", app_config.uart.path);
-    println!("UART baud rate: {}", app_config.uart.baud_rate);
-    println!("Polling interval: {} ms", app_config.polling.interval_ms);
-    println!("OTEL enabled: {}", app_config.otel.enabled);
-
-    println!("{app_config:#?}");
 
     Ok(app_config)
 }
