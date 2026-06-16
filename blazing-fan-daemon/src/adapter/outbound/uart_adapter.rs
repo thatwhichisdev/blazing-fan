@@ -2,14 +2,15 @@ use blazing_fan_proto::{UART_REQ_MAX_SIZE, UART_RES_MAX_SIZE, UartRequest, UartR
 use serial2_tokio::SerialPort;
 use tokio::io::AsyncReadExt;
 
-use crate::core::port::outbound::uart_port::UartPort;
+use crate::core::{config::UartConfig, port::outbound::uart_port::UartPort};
 
 pub struct UartAdapter {
     port: SerialPort,
 }
 
 impl UartAdapter {
-    pub fn new(port: SerialPort) -> Self {
+    pub fn new(config: &UartConfig) -> Self {
+        let port = SerialPort::open(config.path.clone(), config.baud_rate).unwrap();
         Self { port }
     }
 }
@@ -21,7 +22,7 @@ impl UartPort for UartAdapter {
         let data = postcard::to_slice(&request, &mut tx_buf).unwrap();
 
         match self.port.write_all(&data).await {
-            Ok(_) => match self.port.read_exact(&mut rx_buf).await {
+            Ok(()) => match self.port.read_exact(&mut rx_buf).await {
                 Ok(_size) => {
                     let response = postcard::from_bytes::<UartResponse>(&rx_buf).unwrap();
 

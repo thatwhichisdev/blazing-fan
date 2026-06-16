@@ -17,21 +17,26 @@ use opentelemetry_sdk::{
 use tracing_subscriber::EnvFilter;
 use tracing_subscriber::prelude::*;
 
-use crate::{config::OtelConfig, core::port::outbound::otel_port::OtelPort};
+use crate::core::{config::OtelConfig, port::outbound::otel_port::OtelPort, sysinfo::SysInfo};
 
 pub struct OtelAdapter {
+    #[allow(unused)]
     log_provider: SdkLoggerProvider,
+    #[allow(unused)]
     meter_provider: SdkMeterProvider,
 
     cpu_tmp_gauge: Gauge<f64>,
-    cpu_load_gauge: Gauge<f64>,
-    mem_usg_gauge: Gauge<u64>,
+    cpu_usage_gauge: Gauge<f64>,
+    mem_usage_gauge: Gauge<u64>,
 }
 
 impl OtelAdapter {
-    pub fn new(config: OtelConfig) -> color_eyre::Result<Self> {
-        let log_provider = OtelAdapter::init_log_provider(config.clone())?;
-        let meter_provider = OtelAdapter::init_meter_provider(config.clone())?;
+    pub fn new(config: &OtelConfig) -> color_eyre::Result<Self> {
+        // todo: implement logic to handle `enable` field of the config
+        //       need to figure out how to disable otel in case if it is not needed
+
+        let log_provider = OtelAdapter::init_log_provider(config)?;
+        let meter_provider = OtelAdapter::init_meter_provider(config)?;
         let meter = meter_provider.meter("blazing-fan-daemon");
 
         let cpu_tmp_gauge = meter
@@ -56,12 +61,12 @@ impl OtelAdapter {
             log_provider,
             meter_provider,
             cpu_tmp_gauge,
-            cpu_load_gauge,
-            mem_usg_gauge,
+            cpu_usage_gauge: cpu_load_gauge,
+            mem_usage_gauge: mem_usg_gauge,
         })
     }
 
-    fn init_log_provider(config: OtelConfig) -> color_eyre::Result<SdkLoggerProvider> {
+    fn init_log_provider(config: &OtelConfig) -> color_eyre::Result<SdkLoggerProvider> {
         let headers = HashMap::from([
             (
                 "authorization".to_string(),
@@ -107,7 +112,7 @@ impl OtelAdapter {
         Ok(logger_provider)
     }
 
-    fn init_meter_provider(config: OtelConfig) -> color_eyre::Result<SdkMeterProvider> {
+    fn init_meter_provider(config: &OtelConfig) -> color_eyre::Result<SdkMeterProvider> {
         let headers = HashMap::from([
             (
                 "authorization".to_string(),
@@ -146,21 +151,15 @@ impl OtelAdapter {
 }
 
 impl OtelPort for OtelAdapter {
-    fn record_cpu_tmp(&self, value: f64) {
+    fn record_sys_info(&self, sys_info: &SysInfo) {
         let attrs = [KeyValue::new("source", "sysinfo")];
 
-        self.cpu_tmp_gauge.record(value, &attrs);
-    }
+        self.cpu_usage_gauge
+            .record(f64::from(sys_info.cpu_usage), &attrs);
 
-    fn record_cpu_load(&self, value: f64) {
-        let attrs = [KeyValue::new("source", "sysinfo")];
+        self.cpu_tmp_gauge
+            .record(f64::from(sys_info.cpu_tmp), &attrs);
 
-        self.cpu_load_gauge.record(value, &attrs);
-    }
-
-    fn record_mem_usg(&self, value: u64) {
-        let attrs = [KeyValue::new("source", "sysinfo")];
-
-        self.mem_usg_gauge.record(value, &attrs);
+        self.mem_usage_gauge.record(sys_info.mem_usage, &attrs);
     }
 }
