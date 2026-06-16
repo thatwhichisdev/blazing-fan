@@ -348,6 +348,7 @@ dependencies = [
  "serde",
  "serial2-tokio",
  "sysinfo",
+ "thiserror 2.0.18",
  "tokio",
  "tonic",
  "tracing",
