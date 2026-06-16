@@ -1,6 +1,6 @@
 use sysinfo::{Components, CpuRefreshKind, MemoryRefreshKind, RefreshKind, System};
 
-pub struct SysInfoFetcher {
+pub struct SystemFetcher {
     sys: System,
     components: Components,
     refresh: RefreshKind,
@@ -12,7 +12,7 @@ pub struct SysInfo {
     pub mem_usage: u64,
 }
 
-impl SysInfoFetcher {
+impl SystemFetcher {
     pub fn new() -> Self {
         let cpu_refresh = CpuRefreshKind::nothing().with_cpu_usage().with_frequency();
         let mem_refresh = MemoryRefreshKind::nothing().with_ram();

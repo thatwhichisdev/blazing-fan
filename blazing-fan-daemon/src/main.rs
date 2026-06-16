@@ -8,7 +8,7 @@ use crate::{
             otel_port::OtelPort,
             uart_port::{UartError, UartPort},
         },
-        sysinfo::SysInfoFetcher,
+        sysinfo::SystemFetcher,
     },
 };
 
@@ -23,21 +23,17 @@ mod core;
 async fn main() -> color_eyre::Result<()> {
     let config = core::config::load_config()?;
 
-    // Bootstrap outbound uart adapter
+    let mut sys_fetcher = SystemFetcher::new();
     let mut uart_adapter = UartAdapter::new(&config.uart)?;
-    // Bootstrap outbound otel adapter
-    let otel_adapter = OtelAdapter::new(&config.otel)?;
-    // Bootstrap inbound dbus adapter
     let _con = DbusAdapter::build_connection().await?;
-    // Bootstrap sys info fetcher
-    let mut sys_info_fetcher = SysInfoFetcher::new();
+    let otel_adapter = OtelAdapter::new(&config.otel)?;
 
     let mut ticker = interval(Duration::from_millis(config.polling.interval_ms));
 
     loop {
         ticker.tick().await;
 
-        let sys_info = sys_info_fetcher.fetch();
+        let sys_info = sys_fetcher.fetch();
 
         otel_adapter.record_sys_info(&sys_info);
 
@@ -55,9 +51,9 @@ async fn main() -> color_eyre::Result<()> {
                 UartError::Timeout => tracing::warn!("uart request timed out"),
                 UartError::IoError(e) => tracing::error!("uart request failed [io error: {:?}]", e),
                 UartError::PostcardError(e) => {
-                    tracing::error!("uart request failed [postcard error: {:?}]", e)
+                    tracing::error!("uart request failed [postcard error: {:?}]", e);
                 }
             },
-        };
+        }
     }
 }

@@ -1,4 +1,4 @@
-use std::{collections::HashMap, time::Duration};
+use std::{collections::HashMap, sync::LazyLock, time::Duration};
 
 use opentelemetry::{
     KeyValue, global,
@@ -19,7 +19,10 @@ use tracing_subscriber::prelude::*;
 
 use crate::core::{config::OtelConfig, port::outbound::otel_port::OtelPort, sysinfo::SysInfo};
 
-pub struct OtelAdapter {
+static OTEL_ATTRIBUTES: LazyLock<[KeyValue; 1]> =
+    LazyLock::new(|| [KeyValue::new::<&str, &str>("source", "sysinfo")]);
+
+struct OtelAdapterInner {
     #[allow(unused)]
     log_provider: SdkLoggerProvider,
     #[allow(unused)]
@@ -30,40 +33,61 @@ pub struct OtelAdapter {
     mem_usage_gauge: Gauge<u64>,
 }
 
+pub struct OtelAdapter {
+    inner: Option<OtelAdapterInner>,
+}
+
 impl OtelAdapter {
     pub fn new(config: &OtelConfig) -> color_eyre::Result<Self> {
-        // todo: implement logic to handle `enable` field of the config
-        //       need to figure out how to disable otel in case if it is not needed
+        if config.enabled {
+            let log_provider = OtelAdapter::init_log_provider(config)?;
+            let meter_provider = OtelAdapter::init_meter_provider(config)?;
+            let meter = meter_provider.meter("blazing-fan-daemon");
 
-        let log_provider = OtelAdapter::init_log_provider(config)?;
-        let meter_provider = OtelAdapter::init_meter_provider(config)?;
-        let meter = meter_provider.meter("blazing-fan-daemon");
+            let cpu_tmp_gauge = meter
+                .f64_gauge("system.cpu.temperature")
+                .with_description("CPU temperature reported by sysinfo component")
+                .with_unit("Cel")
+                .build();
 
-        let cpu_tmp_gauge = meter
-            .f64_gauge("system.cpu.temperature")
-            .with_description("CPU temperature reported by sysinfo component")
-            .with_unit("Cel")
-            .build();
+            let cpu_load_gauge = meter
+                .f64_gauge("system.cpu.load")
+                .with_description("CPU load reported by sysinfo component")
+                .with_unit("Percentage")
+                .build();
 
-        let cpu_load_gauge = meter
-            .f64_gauge("system.cpu.load")
-            .with_description("CPU load reported by sysinfo component")
-            .with_unit("Percentage")
-            .build();
+            let mem_usg_gauge = meter
+                .u64_gauge("system.memory.usage")
+                .with_description("Memory usage reported by sysinfo component")
+                .with_unit("bytes")
+                .build();
 
-        let mem_usg_gauge = meter
-            .u64_gauge("system.memory.usage")
-            .with_description("Memory usage reported by sysinfo component")
-            .with_unit("bytes")
-            .build();
+            let inner = Some(OtelAdapterInner {
+                log_provider,
+                meter_provider,
+                cpu_tmp_gauge,
+                cpu_usage_gauge: cpu_load_gauge,
+                mem_usage_gauge: mem_usg_gauge,
+            });
 
-        Ok(Self {
-            log_provider,
-            meter_provider,
-            cpu_tmp_gauge,
-            cpu_usage_gauge: cpu_load_gauge,
-            mem_usage_gauge: mem_usg_gauge,
-        })
+            Ok(Self { inner })
+        } else {
+            OtelAdapter::init_default_log_provider();
+
+            Ok(Self { inner: None })
+        }
+    }
+
+    fn init_default_log_provider() {
+        let fmt_layer = tracing_subscriber::fmt::layer();
+
+        let filter = EnvFilter::try_from_default_env()
+            .unwrap_or_else(|_| EnvFilter::new("info,blazing_fan_daemon=debug"));
+
+        tracing_subscriber::registry()
+            .with(filter)
+            .with(fmt_layer)
+            .init();
     }
 
     fn init_log_provider(config: &OtelConfig) -> color_eyre::Result<SdkLoggerProvider> {
@@ -152,14 +176,15 @@ impl OtelAdapter {
 
 impl OtelPort for OtelAdapter {
     fn record_sys_info(&self, sys_info: &SysInfo) {
-        let attrs = [KeyValue::new("source", "sysinfo")];
+        if let Some(otel) = self.inner.as_ref() {
+            otel.cpu_usage_gauge
+                .record(f64::from(sys_info.cpu_usage), OTEL_ATTRIBUTES.as_slice());
 
-        self.cpu_usage_gauge
-            .record(f64::from(sys_info.cpu_usage), &attrs);
+            otel.cpu_tmp_gauge
+                .record(f64::from(sys_info.cpu_tmp), OTEL_ATTRIBUTES.as_slice());
 
-        self.cpu_tmp_gauge
-            .record(f64::from(sys_info.cpu_tmp), &attrs);
-
-        self.mem_usage_gauge.record(sys_info.mem_usage, &attrs);
+            otel.mem_usage_gauge
+                .record(sys_info.mem_usage, OTEL_ATTRIBUTES.as_slice());
+        }
     }
 }
