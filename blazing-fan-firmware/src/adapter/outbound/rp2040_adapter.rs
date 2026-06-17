@@ -28,7 +28,7 @@ impl<'a> RP2040Adapter<'a> {
 
 impl<'a> RP2040Port for RP2040Adapter<'a> {
     fn board_tmp(&mut self) -> Result<i8, RP2040Error> {
-        let adc_raw = self.adc.blocking_read(&mut self.tmp_ch).unwrap();
+        let adc_raw = self.adc.blocking_read(&mut self.tmp_ch)?;
         let adc_voltage = adc_raw as f32 * 3.3 / 4096.0;
         let temp_c = 27.0 - (adc_voltage - 0.706) / 0.001721;
 
@@ -42,7 +42,7 @@ impl<'a> RP2040Port for RP2040Adapter<'a> {
     }
 
     fn board_sys_voltage(&mut self) -> Result<f32, RP2040Error> {
-        let adc_raw = self.adc.blocking_read(&mut self.vsys_ch).unwrap();
+        let adc_raw = self.adc.blocking_read(&mut self.vsys_ch)?;
         let adc_voltage = (adc_raw as f32) * 3.3 * 3.0 / 4096.0;
 
         Ok(adc_voltage)

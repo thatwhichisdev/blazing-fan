@@ -69,21 +69,23 @@ fn boot(spawner: Spawner, peripherals: Peripherals) {
             peripherals.fan_pwr_pin,
             peripherals.ws_pins,
         ))
-        .unwrap();
+        .expect("single instance of this task is running");
 
     spawner
         .spawn(button_adapter_task(peripherals.btn_pin))
-        .unwrap();
+        .expect("single instance of this task is running");
 
     spawner
         .spawn(uart_a_adapter_task(peripherals.uart_a_pins))
-        .unwrap();
+        .expect("single instance of this task is running");
 
     spawner
         .spawn(uart_b_adapter_task(peripherals.uart_b_pins))
-        .unwrap();
+        .expect("single instance of this task is running");
 
-    spawner.spawn(ticker()).unwrap();
+    spawner
+        .spawn(ticker())
+        .expect("single instance of this task is running");
 }
 
 #[ariel_os::task]
@@ -140,7 +142,7 @@ async fn core_task(
 async fn ticker() {
     defmt::info!("Booting ticker");
 
-    let mut fan_signal_rcv = FAN_READY.dyn_receiver().unwrap();
+    let mut fan_signal_rcv = FAN_READY.dyn_receiver().expect("receivers are defined");
     let fan = fan_signal_rcv.get().await;
 
     let mut ticker = Ticker::every(Duration::from_secs(1));
@@ -149,7 +151,9 @@ async fn ticker() {
         ticker.next().await;
 
         let mut guard = fan.lock().await;
-        guard.tick().await;
+        if let Err(e) = guard.tick().await {
+            defmt::error!("error happened in fan main duty cycle {:?}", e);
+        };
     }
 }
 
@@ -157,7 +161,7 @@ async fn ticker() {
 async fn button_adapter_task(pins: ButtonPin) {
     defmt::info!("Booting button listener");
 
-    let mut fan_signal_rcv = FAN_READY.dyn_receiver().unwrap();
+    let mut fan_signal_rcv = FAN_READY.dyn_receiver().expect("receivers are defined");
     let fan = fan_signal_rcv.get().await;
 
     let btn = Input::builder(pins.button, ariel_os::gpio::Pull::Up)
@@ -172,7 +176,7 @@ async fn button_adapter_task(pins: ButtonPin) {
 async fn uart_a_adapter_task(pins: UartAPins) {
     defmt::info!("Booting UART_A");
 
-    let mut fan_signal_rcv = FAN_READY.dyn_receiver().unwrap();
+    let mut fan_signal_rcv = FAN_READY.dyn_receiver().expect("receivers are defined");
     let fan = fan_signal_rcv.get().await;
 
     let uart_config = uart::Config::default();
@@ -196,7 +200,7 @@ async fn uart_a_adapter_task(pins: UartAPins) {
 async fn uart_b_adapter_task(pins: UartBPins) {
     defmt::info!("Booting UART_B");
 
-    let mut fan_signal_rcv = FAN_READY.dyn_receiver().unwrap();
+    let mut fan_signal_rcv = FAN_READY.dyn_receiver().expect("receivers are defined");
     let fan = fan_signal_rcv.get().await;
 
     let uart_config = uart::Config::default();

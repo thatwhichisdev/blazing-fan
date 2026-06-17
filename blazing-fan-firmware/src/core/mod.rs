@@ -1,19 +1,28 @@
 pub mod port;
 
-use blazing_fan_proto::{UartCommand, UartQuery, UartRequest, UartResponse};
-use bounded_integer::BoundedU8;
-use smart_leds::RGB8;
-
 use crate::core::port::{
     inbound::{
         button_port::ButtonPort,
         uart_port::{UartError, UartPort},
     },
     outbound::{
-        emc2101_port::Emc2101Port, fan_power_port::FanPowerPort, rp2040_port::RP2040Port,
+        emc2101_port::{Emc2101Error, Emc2101Port},
+        fan_power_port::FanPowerPort,
+        rp2040_port::RP2040Port,
         ws2812_port::WS2812Port,
     },
 };
+
+use blazing_fan_proto::{UartCommand, UartQuery, UartRequest, UartResponse};
+use bounded_integer::BoundedU8;
+use smart_leds::RGB8;
+use thiserror::Error;
+
+#[derive(Error, Debug, defmt::Format)]
+pub enum FanError {
+    #[error("emc error")]
+    EmcError(#[from] Emc2101Error),
+}
 
 enum Mode {
     Auto,
@@ -52,31 +61,34 @@ where
         }
     }
 
-    pub async fn tick(&mut self) {
+    pub async fn tick(&mut self) -> Result<(), FanError> {
         match self.mode {
             Mode::Auto => {
                 self.pwr.pwr_on();
                 self.brd.led_on();
                 self.pxl.set_rgb8([RGB8::new(128, 0, 0); 2]).await;
-                // todo: implement logic for automatically detecting fan speed
+
+                // todo: implement logic for automatically detecting fan speed based on temperature
+                //       case 1: when compute modules don't provide any cpu temp rely on emc external sensor
+                //       case 2: based on compute modules input which contains cpu temp
+
+                Ok(())
             }
             Mode::Full => {
                 self.pwr.pwr_on();
                 self.brd.led_on();
                 self.pxl.set_rgb8([RGB8::new(0, 0, 128); 2]).await;
-                self.emc
-                    .set_fan_power(BoundedU8::<0, 63>::new(63).unwrap())
-                    .await
-                    .unwrap();
+                self.emc.set_fan_power(BoundedU8::<0, 63>::MAX).await?;
+
+                Ok(())
             }
             Mode::Idle => {
                 self.pwr.pwr_off();
                 self.brd.led_off();
                 self.pxl.set_rgb8([RGB8::new(0, 0, 0); 2]).await;
-                self.emc
-                    .set_fan_power(BoundedU8::<0, 63>::new(0).unwrap())
-                    .await
-                    .unwrap();
+                self.emc.set_fan_power(BoundedU8::<0, 63>::MIN).await?;
+
+                Ok(())
             }
         }
     }
@@ -102,11 +114,11 @@ where
                 UartQuery::FanGetStatus => {
                     defmt::debug!("CORE: Received query - FanGetStatus");
 
-                    let fan_rpm = self.emc.fan_rpm().await.unwrap();
-                    let fan_tmp_internal = self.emc.fan_tmp_internal().await.unwrap();
-                    let fan_tmp_external = self.emc.fan_tmp_external().await.unwrap();
-                    let brd_tmp = self.brd.board_tmp().unwrap();
-                    let brd_vol = self.brd.board_sys_voltage().unwrap();
+                    let fan_rpm = self.emc.fan_rpm().await?;
+                    let fan_tmp_internal = self.emc.fan_tmp_internal().await?;
+                    let fan_tmp_external = self.emc.fan_tmp_external().await?;
+                    let brd_tmp = self.brd.board_tmp()?;
+                    let brd_vol = self.brd.board_sys_voltage()?;
 
                     let uart_response = UartResponse::Status {
                         fan_rpm,

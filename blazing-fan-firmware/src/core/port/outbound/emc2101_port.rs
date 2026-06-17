@@ -1,7 +1,9 @@
 use bounded_integer::BoundedU8;
+use thiserror::Error;
 
-#[derive(Debug, defmt::Format)]
+#[derive(Error, Debug, defmt::Format)]
 pub enum Emc2101Error {
+    #[error("empty")]
     Empty,
 }
 
