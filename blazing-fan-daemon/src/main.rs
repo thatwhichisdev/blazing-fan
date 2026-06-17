@@ -13,8 +13,10 @@ use crate::{
 };
 
 use blazing_fan_proto::{UartQuery, UartRequest};
+use sd_notify::NotifyState;
 use std::time::Duration;
 use tokio::{
+    signal::{self, unix::SignalKind},
     sync::watch::{self, Receiver, Sender},
     time::interval,
 };
@@ -25,6 +27,8 @@ mod core;
 
 #[tokio::main]
 async fn main() -> color_eyre::Result<()> {
+    color_eyre::install()?;
+
     let config = core::config::load_config()?;
 
     let _con = DbusAdapter::build_connection().await?;
@@ -44,6 +48,12 @@ async fn main() -> color_eyre::Result<()> {
     let uart_task = tokio::spawn(uart_task(uart_adapter, uart_rx, uart_cancellation));
     let otel_task = tokio::spawn(otel_task(otel_adapter, otel_rx, otel_cancellation));
 
+    let mut sigintr = signal::unix::signal(SignalKind::interrupt())?;
+    let mut sigquit = signal::unix::signal(SignalKind::quit())?;
+    let mut sigterm = signal::unix::signal(SignalKind::terminate())?;
+
+    let _ = sd_notify::notify(&[NotifyState::Ready])?;
+
     tokio::select!(
         result = syst_task => {
             tracing::error!("system_info_task exited {:?}", result);
@@ -54,11 +64,22 @@ async fn main() -> color_eyre::Result<()> {
         result = otel_task => {
             tracing::error!("otel_task exited {:?}", result);
         }
-        result = tokio::signal::ctrl_c() => {
-            tracing::info!("shutdown requested: {:?}", result);
-            cancellation.cancel();
+        result = signal::ctrl_c() => {
+            tracing::info!("shutdown requested manually: {:?}", result);
+        }
+        result = sigintr.recv() => {
+            tracing::info!("SIGINT received, shutting down service gracefully {:?}", result);
+        }
+        result = sigquit.recv() => {
+            tracing::info!("SIGQUIT received, shutting down service gracefully {:?}", result);
+        }
+        result = sigterm.recv() => {
+            tracing::info!("SIGTERM received, shutting down service gracefully {:?}", result);
         }
     );
+
+    let _ = sd_notify::notify(&[NotifyState::Stopping])?;
+    cancellation.cancel();
 
     Ok(())
 }
@@ -70,14 +91,15 @@ async fn syst_task(mut fetcher: SystemFetcher, tx: Sender<SysInfo>) {
         ticker.tick().await;
         let sys_info = fetcher.fetch();
 
-        // todo: handle possible error
-        tx.send(sys_info).unwrap();
+        if let Err(e) = tx.send(sys_info) {
+            tracing::error!("Failed to dispatch system info event, {:?}", e);
+        };
     }
 }
 
 async fn uart_task(
     mut adapter: UartAdapter,
-    rx: Receiver<SysInfo>,
+    mut rx: Receiver<SysInfo>,
     cancellation: CancellationToken,
 ) {
     let mut ticker = interval(Duration::from_secs(9));
@@ -85,7 +107,7 @@ async fn uart_task(
     loop {
         tokio::select! {
             _ = ticker.tick() => {
-                let _sys_info = rx.borrow().to_owned();
+                let _sys_info = rx.borrow_and_update().to_owned();
 
                 match adapter
                     .request(UartRequest::Query(UartQuery::FanGetStatus))
@@ -115,7 +137,7 @@ async fn uart_task(
 
 async fn otel_task(
     mut adapter: OtelAdapter,
-    rx: Receiver<SysInfo>,
+    mut rx: Receiver<SysInfo>,
     cancellation: CancellationToken,
 ) {
     let mut ticker = interval(Duration::from_secs(9));
@@ -123,7 +145,7 @@ async fn otel_task(
     loop {
         tokio::select! {
             _ = ticker.tick() => {
-                let sys_info = rx.borrow().to_owned();
+                let sys_info = rx.borrow_and_update().to_owned();
                 adapter.record_sys_info(&sys_info);
             }
             _ = cancellation.cancelled() => {
