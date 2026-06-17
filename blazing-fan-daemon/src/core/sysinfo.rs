@@ -6,6 +6,7 @@ pub struct SystemFetcher {
     refresh: RefreshKind,
 }
 
+#[derive(Default, Clone)]
 pub struct SysInfo {
     pub cpu_usage: f32,
     pub cpu_tmp: f32,

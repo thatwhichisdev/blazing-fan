@@ -2,7 +2,7 @@ use std::time::Duration;
 
 use blazing_fan_proto::{UART_REQ_MAX_SIZE, UART_RES_MAX_SIZE, UartRequest, UartResponse};
 use serial2_tokio::SerialPort;
-use tokio::io::AsyncReadExt;
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
 use crate::core::{
     config::UartConfig,
@@ -50,5 +50,12 @@ impl UartPort for UartAdapter {
             }
             Err(e) => Err(UartError::IoError(e)),
         }
+    }
+
+    async fn shutdown(&mut self) -> Result<(), UartError> {
+        self.port.discard_buffers()?;
+        self.port.shutdown().await?;
+
+        Ok(())
     }
 }

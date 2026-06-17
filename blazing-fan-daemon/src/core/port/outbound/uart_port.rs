@@ -13,4 +13,6 @@ pub enum UartError {
 
 pub trait UartPort {
     async fn request(&mut self, request: UartRequest) -> Result<UartResponse, UartError>;
+
+    async fn shutdown(&mut self) -> Result<(), UartError>;
 }

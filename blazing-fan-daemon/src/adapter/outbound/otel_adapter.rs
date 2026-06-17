@@ -17,7 +17,11 @@ use opentelemetry_sdk::{
 use tracing_subscriber::EnvFilter;
 use tracing_subscriber::prelude::*;
 
-use crate::core::{config::OtelConfig, port::outbound::otel_port::OtelPort, sysinfo::SysInfo};
+use crate::core::{
+    config::OtelConfig,
+    port::outbound::otel_port::{OtelError, OtelPort},
+    sysinfo::SysInfo,
+};
 
 static OTEL_ATTRIBUTES: LazyLock<[KeyValue; 1]> =
     LazyLock::new(|| [KeyValue::new::<&str, &str>("source", "sysinfo")]);
@@ -186,5 +190,14 @@ impl OtelPort for OtelAdapter {
             otel.mem_usage_gauge
                 .record(sys_info.mem_usage, OTEL_ATTRIBUTES.as_slice());
         }
+    }
+
+    fn shutdown(&mut self) -> Result<(), OtelError> {
+        if let Some(otel) = self.inner.as_ref() {
+            otel.log_provider.shutdown()?;
+            otel.meter_provider.shutdown()?;
+        }
+
+        Ok(())
     }
 }
