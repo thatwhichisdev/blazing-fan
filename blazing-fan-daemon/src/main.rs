@@ -4,15 +4,12 @@ use crate::{
         outbound::{otel_adapter::OtelAdapter, uart_adapter::UartAdapter},
     },
     core::{
-        port::outbound::{
-            otel_port::OtelPort,
-            uart_port::{UartError, UartPort},
-        },
+        port::outbound::{otel_port::OtelPort, uart_port::UartPort},
         sysinfo::{SysInfo, SystemFetcher},
     },
 };
 
-use blazing_fan_proto::{UartQuery, UartRequest};
+use blazing_fan_proto::{BladeTelemetry, UartRequest, UartResponse};
 use sd_notify::NotifyState;
 use std::time::Duration;
 use tokio::{
@@ -103,27 +100,59 @@ async fn uart_task(
     cancellation: CancellationToken,
 ) {
     let mut ticker = interval(Duration::from_secs(9));
+    let mut attemp: u8 = 0;
+    let mut broken: bool = true;
 
     loop {
         tokio::select! {
             _ = ticker.tick() => {
-                let _sys_info = rx.borrow_and_update().to_owned();
-
-                match adapter
-                    .request(UartRequest::Query(UartQuery::FanGetStatus))
-                    .await
-                {
-                    Ok(res) => {
-                        tracing::info!("uart response received: {:?}", res);
+                if broken {
+                    match adapter.request(UartRequest::Ping).await {
+                        Ok(response) => match response {
+                            UartResponse::Pong => {
+                                tracing::info!("recieved pong from fan");
+                                broken = false;
+                            },
+                            UartResponse::Error(fan_err) => {
+                                tracing::error!("fan error occured during ping request {:?}", fan_err);
+                                attemp = attemp + 1;
+                            },
+                            _ => {
+                                tracing::error!("wrong response received during ping request");
+                                attemp = attemp + 1;
+                            }
+                        },
+                        Err(err) => {
+                            tracing::error!("failed to send uart request {:?}", err);
+                        },
                     }
-                    Err(err) => match err {
-                        UartError::Timeout => tracing::warn!("uart request timed out"),
-                        UartError::IoError(e) => tracing::error!("uart request failed [io error: {:?}]", e),
-                        UartError::PostcardError(e) => {
-                            tracing::error!("uart request failed [postcard error: {:?}]", e);
+                } else {
+                    let sys_info = rx.borrow_and_update().to_owned();
+                    let cpu_tmp = sys_info.cpu_tmp.round() as i8;
+                    let telemetry = BladeTelemetry { cpu_tmp };
+
+                    match adapter
+                        .request(UartRequest::Telemetry(telemetry))
+                        .await
+                    {
+                        Ok(response) => match response {
+                            UartResponse::Telemetry(fan_telemetry) => {
+                                tracing::info!("recieved fan telemetry {:?}", fan_telemetry);
+                                // todo: report fan telemetry to otel
+                            },
+                            UartResponse::Error(fan_err) => {
+                                tracing::error!("fan error occured during telemetry request {:?}", fan_err);
+                            },
+                            _ => {
+                                tracing::error!("wrong response received during telemetry request");
+                            },
                         }
-                    },
+                        Err(err) => {
+                            tracing::error!("failed to send uart request {:?}", err);
+                        },
+                    }
                 }
+
             }
             _ = cancellation.cancelled() => {
                 if let Err(e) = adapter.shutdown().await {

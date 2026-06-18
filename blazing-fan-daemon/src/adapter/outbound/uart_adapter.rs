@@ -26,23 +26,21 @@ impl UartPort for UartAdapter {
     async fn request(&mut self, request: UartRequest) -> Result<UartResponse, UartError> {
         let mut tx_buf = [0u8; UART_REQ_MAX_SIZE];
         let mut rx_buf = [0u8; UART_RES_MAX_SIZE];
-        let data = postcard::to_slice(&request, &mut tx_buf).map_err(UartError::PostcardError)?;
+        let data = postcard::to_slice(&request, &mut tx_buf)?;
 
         match self.port.write_all(data).await {
             Ok(()) => {
                 tokio::select! {
-                    // read branch
                     res = self.port.read_exact(&mut rx_buf) => {
                         match res {
                             Ok(_size) => {
-                                let response = postcard::from_bytes::<UartResponse>(&rx_buf).map_err(UartError::PostcardError)?;
+                                let response = postcard::from_bytes::<UartResponse>(&rx_buf)?;
 
                                 Ok(response)
                             }
                             Err(e) => Err(UartError::IoError(e)),
                         }
                     }
-                    // timout branch
                     () = tokio::time::sleep(Duration::from_secs(1)) => {
                         Err(UartError::Timeout)
                     }

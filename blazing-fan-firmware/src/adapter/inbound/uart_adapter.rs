@@ -1,10 +1,13 @@
-use crate::core::port::inbound::uart_port::UartPort;
+use crate::core::port::inbound::uart_port::{UartError, UartPort};
 use ariel_os::hal::uart;
-use blazing_fan_proto::{UART_REQ_MAX_SIZE, UART_RES_MAX_SIZE, UartRequest, UartResponse};
+use blazing_fan_proto::{
+    FanError, UART_REQ_MAX_SIZE, UART_RES_MAX_SIZE, UartRequest, UartResponse,
+};
 use defmt::{error, info};
 use embassy_sync::{blocking_mutex::raw::CriticalSectionRawMutex, mutex::Mutex};
 use embedded_io_async::{Read as _, Write as _};
 
+#[derive(Debug, Eq, PartialEq, Hash, Clone, Copy)]
 pub enum UartName {
     A,
     B,
@@ -77,23 +80,49 @@ where
                         self.name,
                         defmt::Debug2Format(&err)
                     );
+
+                    let response = UartResponse::Error(FanError::InvalidRequest);
+                    let data = postcard::to_slice(&response, self.tx_buf).unwrap();
+                    self.uart.write(data).await.unwrap();
+                    self.uart.flush().await.unwrap();
+
                     continue;
                 }
             };
 
             let mut guard = self.port.lock().await;
 
-            match guard.request(request).await {
-                Ok(UartResponse::Ok) => continue,
-                // todo: figure out a way to encode errors
-                Ok(UartResponse::Err) => continue,
-                Ok(response @ UartResponse::Status { .. }) => {
+            match guard.request(request, &self.name).await {
+                Ok(response) => {
                     let data = postcard::to_slice(&response, self.tx_buf).unwrap();
                     self.uart.write(data).await.unwrap();
                     self.uart.flush().await.unwrap();
                 }
-                Err(err) => {
-                    error!("{=?}: Request to core failed [err: {=?}]", self.name, err);
+                Err(e) => {
+                    let response = match e {
+                        UartError::EmcError(emc_err) => {
+                            defmt::error!(
+                                "{}: emc internal error [err: {=?}]",
+                                self.name,
+                                defmt::Debug2Format(&emc_err)
+                            );
+
+                            UartResponse::Error(FanError::EmcError)
+                        }
+                        UartError::RpError(mcu_err) => {
+                            defmt::error!(
+                                "{}: mcu internal error [err: {=?}]",
+                                self.name,
+                                defmt::Debug2Format(&mcu_err)
+                            );
+
+                            UartResponse::Error(FanError::McuError)
+                        }
+                    };
+
+                    let data = postcard::to_slice(&response, self.tx_buf).unwrap();
+                    self.uart.write(data).await.unwrap();
+                    self.uart.flush().await.unwrap();
                 }
             }
         }

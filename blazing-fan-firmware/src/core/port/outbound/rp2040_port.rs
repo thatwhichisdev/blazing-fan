@@ -13,9 +13,9 @@ impl From<embassy_rp::adc::Error> for RP2040Error {
 }
 
 pub trait RP2040Port {
-    fn board_tmp(&mut self) -> Result<i8, RP2040Error>;
+    fn mcu_tmp(&mut self) -> Result<i8, RP2040Error>;
 
-    fn board_sys_voltage(&mut self) -> Result<f32, RP2040Error>;
+    fn mcu_sys_vol_mv(&mut self) -> Result<u16, RP2040Error>;
 
     fn led_on(&mut self);
 
