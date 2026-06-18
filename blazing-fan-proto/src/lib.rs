@@ -6,15 +6,15 @@ use serde::{Deserialize, Serialize};
 #[derive(Serialize, Deserialize, Debug, Eq, PartialEq, MaxSize)]
 pub struct FanTelemetry {
     pub fan_rpm: u16,
-    pub emc_tmp_internal: i8,
-    pub emc_tmp_external: i8,
-    pub mcu_tmp: i8,
-    pub mcu_vol_mv: u16,
+    pub fan_ctrl_temp_internal: i8,
+    pub fan_ctrl_temp_external: i8,
+    pub mcu_internal_temp: i8,
+    pub mcu_system_voltage: u16,
 }
 
 #[derive(Serialize, Deserialize, Debug, Eq, PartialEq, MaxSize)]
 pub struct BladeTelemetry {
-    pub cpu_tmp: i8,
+    pub cpu_temp: i8,
 }
 
 #[derive(Serialize, Deserialize, Debug, Eq, PartialEq, MaxSize)]

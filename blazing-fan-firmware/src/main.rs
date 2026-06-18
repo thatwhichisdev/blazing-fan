@@ -7,20 +7,18 @@ mod pins;
 
 use crate::{
     adapter::{
-        inbound::{
-            button_adapter::ButtonAdapter,
-            uart_adapter::{UartAdapter, UartName},
-        },
+        inbound::{gpio_button::GpioButton, uart::UartAdapter},
         outbound::{
-            emc2101_adapter::Emc2101Adapter, fan_power_adapter::FanPowerAdapter,
-            rp2040_adapter::RP2040Adapter, ws2812_adapter::WS2812Adapter,
+            emc2101::Emc2101, gpio_fan_supply::GpioFanSupply, rp2040::Rp2040, ws2812::Ws2812,
         },
     },
-    core::Fan,
+    core::{System, port::inbound::uart_port::UartName},
     pins::{
-        ButtonPin, EmcPins, FanPowerPin, Peripherals, PicoPins, UartAPins, UartBPins, WS2812Pins,
+        FanControllerPins, FanSupplyPin, McuPins, Peripherals, StatusIndicatorPins, Uart0Pins,
+        Uart1Pins, UserButtonPin,
     },
 };
+
 use ariel_os::{
     asynch::Spawner,
     gpio::{Input, Level, Output},
@@ -42,21 +40,14 @@ bind_interrupts!(struct Irqs {
     PIO0_IRQ_0 => embassy_rp::pio::InterruptHandler<embassy_rp::peripherals::PIO0>;
 });
 
-/// Fan should be wrapped in Mutex since we're going to share it across multiple tasks
-static FAN: StaticCell<
-    Mutex<
-        CriticalSectionRawMutex,
-        Fan<RP2040Adapter, Emc2101Adapter, FanPowerAdapter, WS2812Adapter>,
-    >,
+static SYSTEM: StaticCell<
+    Mutex<CriticalSectionRawMutex, System<Rp2040, Emc2101, GpioFanSupply, Ws2812>>,
 > = StaticCell::new();
 
 #[allow(clippy::type_complexity)]
-static FAN_READY: Watch<
+static SYSTEM_READY_SIGNAL: Watch<
     CriticalSectionRawMutex,
-    &'static Mutex<
-        CriticalSectionRawMutex,
-        Fan<RP2040Adapter, Emc2101Adapter, FanPowerAdapter, WS2812Adapter>,
-    >,
+    &'static Mutex<CriticalSectionRawMutex, System<Rp2040, Emc2101, GpioFanSupply, Ws2812>>,
     4,
 > = Watch::new();
 
@@ -64,93 +55,84 @@ static FAN_READY: Watch<
 fn boot(spawner: Spawner, peripherals: Peripherals) {
     spawner
         .spawn(core_task(
-            peripherals.pico_pins,
-            peripherals.emc_pins,
-            peripherals.fan_pwr_pin,
-            peripherals.ws_pins,
+            peripherals.mcu_pins,
+            peripherals.fan_ctrl_pins,
+            peripherals.fan_supply_pin,
+            peripherals.status_indicator_pins,
         ))
-        .expect("single instance of this task is running");
+        .expect("failed to spawn core_task: task instance already running");
 
     spawner
-        .spawn(button_adapter_task(peripherals.btn_pin))
-        .expect("single instance of this task is running");
+        .spawn(button_adapter_task(peripherals.user_btn_pin))
+        .expect("failed to spawn button_adapter_task: task instance already running");
 
     spawner
-        .spawn(uart_a_adapter_task(peripherals.uart_a_pins))
-        .expect("single instance of this task is running");
+        .spawn(uart_a_adapter_task(peripherals.uart_0_pins))
+        .expect("failed to spawn uart_a_adapter_task: task instance already running");
 
     spawner
-        .spawn(uart_b_adapter_task(peripherals.uart_b_pins))
-        .expect("single instance of this task is running");
+        .spawn(uart_b_adapter_task(peripherals.uart_1_pins))
+        .expect("failed to spawn uart_b_adapter_task: task instance already running");
 
     spawner
         .spawn(ticker())
-        .expect("single instance of this task is running");
+        .expect("failed to spawn ticker task: task instance already running");
 }
 
 #[ariel_os::task]
 async fn core_task(
-    pico_pins: PicoPins,
-    emc_pins: EmcPins,
-    fan_pwr_pin: FanPowerPin,
-    ws_pins: WS2812Pins,
+    pico_pins: McuPins,
+    emc_pins: FanControllerPins,
+    fan_pwr_pin: FanSupplyPin,
+    ws_pins: StatusIndicatorPins,
 ) {
     defmt::info!("Booting firmware");
 
-    // Bootstraping RP2040 adapter
     let adc_config = adc::Config::default();
     let adc = adc::Adc::new_blocking(pico_pins.adc, adc_config);
-    let tmp_ch = adc::Channel::new_temp_sensor(pico_pins.adc_tmp);
-    let vsys_ch = adc::Channel::new_pin(pico_pins.vsys, embassy_rp::gpio::Pull::None);
-    let led = Output::new(pico_pins.led, Level::Low);
-    let rp2040_adapter = RP2040Adapter::new(adc, tmp_ch, vsys_ch, led);
+    let temp_ch = adc::Channel::new_temp_sensor(pico_pins.temp_ch);
+    let vsys_ch = adc::Channel::new_pin(pico_pins.vsys_ch, embassy_rp::gpio::Pull::None);
+    let led_output = Output::new(pico_pins.led_output, Level::Low);
+    let rp2040 = Rp2040::new(adc, temp_ch, vsys_ch, led_output);
 
-    // Bootstraping fan power adapter
-    let fan_power_output = Output::new(fan_pwr_pin.pwr, Level::High);
-    let fan_power_adapter = FanPowerAdapter::new(fan_power_output);
+    let fan_supply_output = Output::new(fan_pwr_pin.pwr, Level::High);
+    let fan_supply = GpioFanSupply::new(fan_supply_output);
 
-    // Bootstraping EMC2101 adapter
     let i2c_config = i2c::controller::Config::default();
     let i2c0 = i2c::controller::I2C0::new(emc_pins.sda, emc_pins.scl, i2c_config);
-    let emc2101_adapter = Emc2101Adapter::new(i2c0).await;
+    let emc2101 = Emc2101::new(i2c0).await;
 
-    // Bootstraping WS2812 adapter
     let mut pio = Pio::new(ws_pins.pio, Irqs);
     let pio_program = PioWs2812Program::new(&mut pio.common);
-    let ws2812 = PioWs2812::<PIO0, 0, 2>::new(
+    let pio_driver = PioWs2812::<PIO0, 0, 2>::new(
         &mut pio.common,
         pio.sm0,
         ws_pins.dma,
         ws_pins.led,
         &pio_program,
     );
-    let ws2812_adapter = WS2812Adapter::new(ws2812);
+    let ws2812 = Ws2812::new(pio_driver);
 
-    // Bootstraping Fan
-    let fan: &'static _ = FAN.init(Mutex::new(Fan::new(
-        rp2040_adapter,
-        emc2101_adapter,
-        fan_power_adapter,
-        ws2812_adapter,
-    )));
+    let system: &'static _ =
+        SYSTEM.init(Mutex::new(System::new(rp2040, emc2101, fan_supply, ws2812)));
 
-    let fan_signal_sender = FAN_READY.dyn_sender();
-    fan_signal_sender.send(fan);
+    SYSTEM_READY_SIGNAL.dyn_sender().send(system);
 }
 
 #[ariel_os::task]
 async fn ticker() {
-    defmt::info!("Booting ticker");
-
-    let mut fan_signal_rcv = FAN_READY.dyn_receiver().expect("receivers are defined");
-    let fan = fan_signal_rcv.get().await;
+    let system = SYSTEM_READY_SIGNAL
+        .dyn_receiver()
+        .expect("receiver capacity exceeded, expected at most 4 system consumers")
+        .get()
+        .await;
 
     let mut ticker = Ticker::every(Duration::from_secs(1));
 
     loop {
         ticker.next().await;
 
-        let mut guard = fan.lock().await;
+        let mut guard = system.lock().await;
         if let Err(e) = guard.tick().await {
             defmt::error!("error happened in fan main duty cycle {:?}", e);
         };
@@ -158,26 +140,28 @@ async fn ticker() {
 }
 
 #[ariel_os::task]
-async fn button_adapter_task(pins: ButtonPin) {
-    defmt::info!("Booting button listener");
+async fn button_adapter_task(pins: UserButtonPin) {
+    let system = SYSTEM_READY_SIGNAL
+        .dyn_receiver()
+        .expect("receiver capacity exceeded, expected at most 4 system consumers")
+        .get()
+        .await;
 
-    let mut fan_signal_rcv = FAN_READY.dyn_receiver().expect("receivers are defined");
-    let fan = fan_signal_rcv.get().await;
-
-    let btn = Input::builder(pins.button, ariel_os::gpio::Pull::Up)
+    let button_input = Input::builder(pins.input, ariel_os::gpio::Pull::Up)
         .build_with_interrupt()
         .unwrap();
 
-    let mut button_adapter = ButtonAdapter::new(btn, fan);
+    let mut button_adapter = GpioButton::new(button_input, system);
     button_adapter.start().await;
 }
 
 #[ariel_os::task]
-async fn uart_a_adapter_task(pins: UartAPins) {
-    defmt::info!("Booting UART_A");
-
-    let mut fan_signal_rcv = FAN_READY.dyn_receiver().expect("receivers are defined");
-    let fan = fan_signal_rcv.get().await;
+async fn uart_a_adapter_task(pins: Uart0Pins) {
+    let system = SYSTEM_READY_SIGNAL
+        .dyn_receiver()
+        .expect("receiver capacity exceeded, expected at most 4 system consumers")
+        .get()
+        .await;
 
     let uart_config = uart::Config::default();
     let mut rx_buf = [0u8; UART_REQ_MAX_SIZE];
@@ -189,19 +173,20 @@ async fn uart_a_adapter_task(pins: UartAPins) {
         &mut tx_buf,
         uart_config,
     )
-    .expect("UART0 should be present");
+    .expect("UART0::new returned an error despite being documented as infallible");
 
-    let mut uart_a_adapter = UartAdapter::new(uart, &mut rx_buf, &mut tx_buf, fan, UartName::A);
+    let mut uart_a_adapter = UartAdapter::new(uart, &mut rx_buf, &mut tx_buf, system, UartName::A);
 
     uart_a_adapter.start().await;
 }
 
 #[ariel_os::task]
-async fn uart_b_adapter_task(pins: UartBPins) {
-    defmt::info!("Booting UART_B");
-
-    let mut fan_signal_rcv = FAN_READY.dyn_receiver().expect("receivers are defined");
-    let fan = fan_signal_rcv.get().await;
+async fn uart_b_adapter_task(pins: Uart1Pins) {
+    let system = SYSTEM_READY_SIGNAL
+        .dyn_receiver()
+        .expect("receiver capacity exceeded, expected at most 4 system consumers")
+        .get()
+        .await;
 
     let uart_config = uart::Config::default();
     let mut rx_buf = [0u8; UART_REQ_MAX_SIZE];
@@ -213,9 +198,9 @@ async fn uart_b_adapter_task(pins: UartBPins) {
         &mut tx_buf,
         uart_config,
     )
-    .expect("UART1 should be present");
+    .expect("UART1::new returned an error despite being documented as infallible");
 
-    let mut uart_b_adapter = UartAdapter::new(uart, &mut rx_buf, &mut tx_buf, fan, UartName::B);
+    let mut uart_b_adapter = UartAdapter::new(uart, &mut rx_buf, &mut tx_buf, system, UartName::B);
 
     uart_b_adapter.start().await;
 }

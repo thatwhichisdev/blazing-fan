@@ -1,2 +1,2 @@
-pub mod button_adapter;
-pub mod uart_adapter;
+pub mod gpio_button;
+pub mod uart;

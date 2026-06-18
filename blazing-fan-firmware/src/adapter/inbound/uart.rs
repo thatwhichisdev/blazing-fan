@@ -1,4 +1,4 @@
-use crate::core::port::inbound::uart_port::{UartError, UartPort};
+use crate::core::port::inbound::uart_port::{UartError, UartName, UartPort};
 use ariel_os::hal::uart;
 use blazing_fan_proto::{
     FanError, UART_REQ_MAX_SIZE, UART_RES_MAX_SIZE, UartRequest, UartResponse,
@@ -6,21 +6,6 @@ use blazing_fan_proto::{
 use defmt::{error, info};
 use embassy_sync::{blocking_mutex::raw::CriticalSectionRawMutex, mutex::Mutex};
 use embedded_io_async::{Read as _, Write as _};
-
-#[derive(Debug, Eq, PartialEq, Hash, Clone, Copy)]
-pub enum UartName {
-    A,
-    B,
-}
-
-impl defmt::Format for UartName {
-    fn format(&self, fmt: defmt::Formatter) {
-        match self {
-            UartName::A => defmt::write!(fmt, "UART_A"),
-            UartName::B => defmt::write!(fmt, "UART_B"),
-        }
-    }
-}
 
 pub struct UartAdapter<'a, P>
 where
@@ -92,7 +77,7 @@ where
 
             let mut guard = self.port.lock().await;
 
-            match guard.request(request, &self.name).await {
+            match guard.request(request).await {
                 Ok(response) => {
                     let data = postcard::to_slice(&response, self.tx_buf).unwrap();
                     self.uart.write(data).await.unwrap();

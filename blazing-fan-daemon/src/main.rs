@@ -45,9 +45,9 @@ async fn main() -> color_eyre::Result<()> {
     let uart_task = tokio::spawn(uart_task(uart_adapter, uart_rx, uart_cancellation));
     let otel_task = tokio::spawn(otel_task(otel_adapter, otel_rx, otel_cancellation));
 
-    let mut sigintr = signal::unix::signal(SignalKind::interrupt())?;
-    let mut sigquit = signal::unix::signal(SignalKind::quit())?;
-    let mut sigterm = signal::unix::signal(SignalKind::terminate())?;
+    let mut sig_intr = signal::unix::signal(SignalKind::interrupt())?;
+    let mut sig_quit = signal::unix::signal(SignalKind::quit())?;
+    let mut sig_term = signal::unix::signal(SignalKind::terminate())?;
 
     let _ = sd_notify::notify(&[NotifyState::Ready])?;
 
@@ -64,13 +64,13 @@ async fn main() -> color_eyre::Result<()> {
         result = signal::ctrl_c() => {
             tracing::info!("shutdown requested manually: {:?}", result);
         }
-        result = sigintr.recv() => {
+        result = sig_intr.recv() => {
             tracing::info!("SIGINT received, shutting down service gracefully {:?}", result);
         }
-        result = sigquit.recv() => {
+        result = sig_quit.recv() => {
             tracing::info!("SIGQUIT received, shutting down service gracefully {:?}", result);
         }
-        result = sigterm.recv() => {
+        result = sig_term.recv() => {
             tracing::info!("SIGTERM received, shutting down service gracefully {:?}", result);
         }
     );
@@ -128,8 +128,8 @@ async fn uart_task(
                     }
                 } else {
                     let sys_info = rx.borrow_and_update().to_owned();
-                    let cpu_tmp = sys_info.cpu_tmp.round() as i8;
-                    let telemetry = BladeTelemetry { cpu_tmp };
+                    let cpu_temp = sys_info.cpu_tmp.round() as i8;
+                    let telemetry = BladeTelemetry { cpu_temp };
 
                     match adapter
                         .request(UartRequest::Telemetry(telemetry))

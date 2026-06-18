@@ -1,21 +1,21 @@
 use thiserror::Error;
 
 #[derive(Error, Debug, defmt::Format)]
-pub enum RP2040Error {
+pub enum McuError {
     #[error("adc conversion failed")]
     AdcError(embassy_rp::adc::Error),
 }
 
-impl From<embassy_rp::adc::Error> for RP2040Error {
+impl From<embassy_rp::adc::Error> for McuError {
     fn from(value: embassy_rp::adc::Error) -> Self {
         Self::AdcError(value)
     }
 }
 
-pub trait RP2040Port {
-    fn mcu_tmp(&mut self) -> Result<i8, RP2040Error>;
+pub trait Mcu {
+    fn get_internal_temp(&mut self) -> Result<i8, McuError>;
 
-    fn mcu_sys_vol_mv(&mut self) -> Result<u16, RP2040Error>;
+    fn get_system_voltage(&mut self) -> Result<u16, McuError>;
 
     fn led_on(&mut self);
 
