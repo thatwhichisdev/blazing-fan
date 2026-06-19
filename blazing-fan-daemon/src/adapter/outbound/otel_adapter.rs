@@ -1,5 +1,6 @@
 use std::{collections::HashMap, time::Duration};
 
+use blazing_fan_proto::FanTelemetry;
 use opentelemetry::{
     KeyValue, global,
     metrics::{Gauge, MeterProvider},
@@ -32,6 +33,7 @@ struct OtelAdapterInner {
     cpu_temp_gauge: Gauge<f64>,
     cpu_usage_gauge: Gauge<f64>,
     mem_usage_gauge: Gauge<u64>,
+    fan_rpm_gauge: Gauge<u64>,
 
     attributes: [KeyValue; 1],
 }
@@ -65,12 +67,19 @@ impl OtelAdapter {
                 .with_unit("bytes")
                 .build();
 
+            let fan_rpm_gauge = meter
+                .u64_gauge("fan.rpm")
+                .with_description("RPM of the fan")
+                .with_unit("rpm")
+                .build();
+
             let inner = Some(OtelAdapterInner {
                 log_provider,
                 meter_provider,
                 cpu_temp_gauge: cpu_tmp_gauge,
                 cpu_usage_gauge: cpu_load_gauge,
                 mem_usage_gauge: mem_usg_gauge,
+                fan_rpm_gauge,
                 attributes,
             });
 
@@ -189,6 +198,13 @@ impl OtelPort for OtelAdapter {
 
             otel.mem_usage_gauge
                 .record(sys_info.mem_usage, &otel.attributes);
+        }
+    }
+
+    fn recond_fan_telemetry(&self, fan_telemetry: &FanTelemetry) {
+        if let Some(otel) = self.inner.as_ref() {
+            otel.fan_rpm_gauge
+                .record(fan_telemetry.fan_rpm as u64, &otel.attributes);
         }
     }
 

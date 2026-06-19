@@ -9,7 +9,7 @@ use crate::{
     },
 };
 
-use blazing_fan_proto::{BladeTelemetry, UartRequest, UartResponse};
+use blazing_fan_proto::{BladeTelemetry, FanTelemetry, UartRequest, UartResponse};
 use opentelemetry::KeyValue;
 use sd_notify::NotifyState;
 use std::time::Duration;
@@ -37,17 +37,29 @@ async fn main() -> color_eyre::Result<()> {
     let attributes = [KeyValue::new("hostname", sys_info.hostname)];
     let otel_adapter = OtelAdapter::new(&config.otel, attributes)?;
 
-    let (tx, _) = watch::channel(SystemMetrics::default());
-    let uart_rx = tx.subscribe();
-    let otel_rx = tx.subscribe();
+    let (system_metrics_tx, _) = watch::channel(SystemMetrics::default());
+    let system_metrics_uart_rx = system_metrics_tx.subscribe();
+    let system_metrics_otel_rx = system_metrics_tx.subscribe();
+
+    let (fan_telemetry_tx, fan_telemetry_rx) = watch::channel(FanTelemetry::default());
 
     let cancellation = CancellationToken::new();
     let uart_cancellation = cancellation.child_token();
     let otel_cancellation = cancellation.child_token();
 
-    let syst_task = tokio::spawn(syst_task(syst_fetcher, tx));
-    let uart_task = tokio::spawn(uart_task(uart_adapter, uart_rx, uart_cancellation));
-    let otel_task = tokio::spawn(otel_task(otel_adapter, otel_rx, otel_cancellation));
+    let syst_task = tokio::spawn(syst_task(syst_fetcher, system_metrics_tx));
+    let uart_task = tokio::spawn(uart_task(
+        uart_adapter,
+        system_metrics_uart_rx,
+        fan_telemetry_tx,
+        uart_cancellation,
+    ));
+    let otel_task = tokio::spawn(otel_task(
+        otel_adapter,
+        system_metrics_otel_rx,
+        fan_telemetry_rx,
+        otel_cancellation,
+    ));
 
     let mut sig_intr = signal::unix::signal(SignalKind::interrupt())?;
     let mut sig_quit = signal::unix::signal(SignalKind::quit())?;
@@ -101,6 +113,7 @@ async fn syst_task(mut fetcher: SystemFetcher, tx: Sender<SystemMetrics>) {
 async fn uart_task(
     mut adapter: UartAdapter,
     mut rx: Receiver<SystemMetrics>,
+    mut tx: Sender<FanTelemetry>,
     cancellation: CancellationToken,
 ) {
     let mut ticker = interval(Duration::from_secs(9));
@@ -142,7 +155,7 @@ async fn uart_task(
                         Ok(response) => match response {
                             UartResponse::Telemetry(fan_telemetry) => {
                                 tracing::info!("recieved fan telemetry {:?}", fan_telemetry);
-                                // todo: report fan telemetry to otel
+                                tx.send(fan_telemetry).unwrap();
                             },
                             UartResponse::Error(fan_err) => {
                                 tracing::error!("fan error occured during telemetry request {:?}", fan_err);
@@ -170,16 +183,19 @@ async fn uart_task(
 
 async fn otel_task(
     mut adapter: OtelAdapter,
-    mut rx: Receiver<SystemMetrics>,
+    mut system_metrics_rx: Receiver<SystemMetrics>,
+    mut fan_telemetry_rx: Receiver<FanTelemetry>,
     cancellation: CancellationToken,
 ) {
-    let mut ticker = interval(Duration::from_secs(9));
-
     loop {
         tokio::select! {
-            _ = ticker.tick() => {
-                let sys_info = rx.borrow_and_update().to_owned();
+            _ = system_metrics_rx.changed() => {
+                let sys_info = system_metrics_rx.borrow().to_owned();
                 adapter.record_sys_info(&sys_info);
+            }
+            _ = fan_telemetry_rx.changed() => {
+                let fan_telemetry = fan_telemetry_rx.borrow().to_owned();
+                adapter.recond_fan_telemetry(&fan_telemetry);
             }
             _ = cancellation.cancelled() => {
                 if let Err(e) = adapter.shutdown() {

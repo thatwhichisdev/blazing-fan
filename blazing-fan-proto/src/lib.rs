@@ -3,7 +3,7 @@
 use postcard::experimental::max_size::MaxSize;
 use serde::{Deserialize, Serialize};
 
-#[derive(Serialize, Deserialize, Debug, Eq, PartialEq, MaxSize, defmt::Format)]
+#[derive(Serialize, Deserialize, Debug, Eq, PartialEq, MaxSize, defmt::Format, Default, Clone)]
 pub struct FanTelemetry {
     pub fan_rpm: u16,
     pub fan_ctrl_temp_internal: i8,
