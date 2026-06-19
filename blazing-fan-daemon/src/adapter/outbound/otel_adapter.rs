@@ -173,7 +173,7 @@ impl OtelAdapter {
             .build();
 
         let reader = PeriodicReader::builder(exporter, Tokio)
-            .with_interval(Duration::from_secs(1))
+            .with_interval(Duration::from_secs(60))
             .build();
 
         let provider = SdkMeterProvider::builder()

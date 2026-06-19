@@ -1,4 +1,4 @@
-use blazing_fan_proto::{UartRequest, UartResponse};
+use blazing_fan_proto::{FrameError, UartRequest, UartResponse};
 use thiserror::Error;
 
 #[derive(Error, Debug)]
@@ -9,6 +9,8 @@ pub enum UartError {
     IoError(#[from] std::io::Error),
     #[error("postcard/serde error {0}")]
     PostcardError(#[from] postcard::Error),
+    #[error("frame serialization/deserialization error")]
+    Frame(#[from] FrameError),
 }
 
 pub trait UartPort {

@@ -113,7 +113,7 @@ async fn syst_task(mut fetcher: SystemFetcher, tx: Sender<SystemMetrics>) {
 async fn uart_task(
     mut adapter: UartAdapter,
     mut rx: Receiver<SystemMetrics>,
-    mut tx: Sender<FanTelemetry>,
+    tx: Sender<FanTelemetry>,
     cancellation: CancellationToken,
 ) {
     let mut ticker = interval(Duration::from_secs(9));
@@ -130,7 +130,7 @@ async fn uart_task(
                                 tracing::info!("recieved pong from fan");
                                 broken = false;
                             },
-                            UartResponse::Error(fan_err) => {
+                            UartResponse::Err(fan_err) => {
                                 tracing::error!("fan error occured during ping request {:?}", fan_err);
                                 attemp = attemp + 1;
                             },
@@ -157,7 +157,7 @@ async fn uart_task(
                                 tracing::info!("recieved fan telemetry {:?}", fan_telemetry);
                                 tx.send(fan_telemetry).unwrap();
                             },
-                            UartResponse::Error(fan_err) => {
+                            UartResponse::Err(fan_err) => {
                                 tracing::error!("fan error occured during telemetry request {:?}", fan_err);
                             },
                             _ => {

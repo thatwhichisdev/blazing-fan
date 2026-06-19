@@ -21,7 +21,10 @@ embassy-rp = { version = "0.8", default-features = false }
 
 static_cell = "2.1.1"
 
-blazing-fan-proto = { path = "../blazing-fan-proto" }
+blazing-fan-proto = { path = "../blazing-fan-proto", default-features = false, features = [
+  "no-std",
+  "defmt",
+] }
 
 emc2101 = { version = "2.0.1", features = ["async", "defmt"] }
 fugit = "0.3.7"

@@ -1,16 +1,13 @@
-use std::time::Duration;
-
-use blazing_fan_proto::{UART_REQ_MAX_SIZE, UART_RES_MAX_SIZE, UartRequest, UartResponse};
-use crc::{CRC_32_ISCSI, Crc};
-use serial2_tokio::SerialPort;
-use tokio::io::AsyncWriteExt;
+use blazing_fan_proto::{
+    Frame, FrameBody, FrameHeader, REQUEST_MAX_SIZE, RESPONSE_MAX_SIZE, UartRequest, UartResponse,
+};
+use serial2_tokio::{CharSize, FlowControl, Parity, SerialPort, Settings, StopBits};
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
 use crate::core::{
     config::UartConfig,
     port::outbound::uart_port::{UartError, UartPort},
 };
-
-const CRC32: Crc<u32> = Crc::<u32>::new(&CRC_32_ISCSI);
 
 pub struct UartAdapter {
     port: SerialPort,
@@ -18,41 +15,53 @@ pub struct UartAdapter {
 
 impl UartAdapter {
     pub fn new(config: &UartConfig) -> Result<Self, UartError> {
-        match SerialPort::open(config.path.clone(), config.baud_rate) {
-            Ok(port) => Ok(Self { port }),
-            Err(e) => Err(UartError::IoError(e)),
-        }
+        let port = SerialPort::open("/dev/ttyAMA4", |mut settings: Settings| {
+            settings.set_raw();
+            settings.set_baud_rate(config.baud_rate)?;
+            settings.set_char_size(CharSize::Bits8);
+            settings.set_stop_bits(StopBits::One);
+            settings.set_parity(Parity::None);
+            settings.set_flow_control(FlowControl::None);
+            Ok(settings)
+        })?;
+
+        Ok(Self { port })
+    }
+
+    async fn read_frame(&mut self) -> Result<Frame<RESPONSE_MAX_SIZE>, UartError> {
+        let mut header_raw = [0u8; 2];
+        self.port.read(&mut header_raw).await?;
+        let header = FrameHeader::from(header_raw);
+
+        let mut body_raw = [0u8; RESPONSE_MAX_SIZE];
+        let body_len = usize::from(header.length);
+        self.port.read_exact(&mut body_raw[..body_len]).await?;
+
+        let body = FrameBody::<RESPONSE_MAX_SIZE>::from_slice(&body_raw)?;
+
+        Ok(Frame { header, body })
+    }
+
+    async fn write_frame(&mut self, frame: Frame<REQUEST_MAX_SIZE>) -> Result<(), UartError> {
+        tracing::info!("writing header {:?}", &frame.header.as_slice());
+        self.port.write_all(&frame.header.as_slice()).await?;
+        tracing::info!("writing body {:?}", &frame.body.as_slice());
+        self.port.write_all(frame.body.as_slice()).await?;
+        self.port.flush().await?;
+
+        Ok(())
     }
 }
 
 impl UartPort for UartAdapter {
     async fn request(&mut self, request: UartRequest) -> Result<UartResponse, UartError> {
-        let mut tx_buf = [0u8; UART_REQ_MAX_SIZE + 4];
-        let mut rx_buf = [0u8; UART_RES_MAX_SIZE + 4];
-        let data = postcard::to_slice(&request, &mut tx_buf)?;
+        let request_frame = Frame::<REQUEST_MAX_SIZE>::try_from(&request)?;
+        self.write_frame(request_frame).await?;
 
-        match self.port.write_all(data).await {
-            Ok(()) => {
-                self.port.flush().await.unwrap();
+        let response_frame = self.read_frame().await?;
+        let response = UartResponse::try_from(&response_frame)?;
 
-                tokio::select! {
-                    res = self.port.read(&mut rx_buf) => {
-                        match res {
-                            Ok(_size) => {
-                                let response = postcard::from_bytes_crc32::<UartResponse>(&rx_buf, CRC32.digest())?;
-
-                                Ok(response)
-                            }
-                            Err(e) => Err(UartError::IoError(e)),
-                        }
-                    }
-                    () = tokio::time::sleep(Duration::from_secs(10)) => {
-                        Err(UartError::Timeout)
-                    }
-                }
-            }
-            Err(e) => Err(UartError::IoError(e)),
-        }
+        Ok(response)
     }
 
     async fn shutdown(&mut self) -> Result<(), UartError> {

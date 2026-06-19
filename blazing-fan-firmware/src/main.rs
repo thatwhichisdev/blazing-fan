@@ -26,7 +26,7 @@ use ariel_os::{
     reexports::embassy_time::Ticker,
     time::Duration,
 };
-use blazing_fan_proto::{UART_REQ_MAX_SIZE, UART_RES_MAX_SIZE};
+use blazing_fan_proto::{REQUEST_MAX_SIZE, RESPONSE_MAX_SIZE};
 use embassy_rp::{
     adc, bind_interrupts,
     peripherals::PIO0,
@@ -170,8 +170,8 @@ async fn uart_a_listener(pins: Uart0Pins) {
         .await;
 
     let uart_config = uart::Config::default();
-    let mut rx_buf = [0u8; UART_REQ_MAX_SIZE + 4];
-    let mut tx_buf = [0u8; UART_RES_MAX_SIZE + 4];
+    let mut rx_buf = [0u8; REQUEST_MAX_SIZE];
+    let mut tx_buf = [0u8; RESPONSE_MAX_SIZE];
     let uart = uart::UART0::new(
         pins.uart0_rx,
         pins.uart0_tx,
@@ -195,8 +195,8 @@ async fn uart_b_listener(pins: Uart1Pins) {
         .await;
 
     let uart_config = uart::Config::default();
-    let mut rx_buf = [0u8; UART_REQ_MAX_SIZE + 4];
-    let mut tx_buf = [0u8; UART_RES_MAX_SIZE + 4];
+    let mut rx_buf = [0u8; REQUEST_MAX_SIZE];
+    let mut tx_buf = [0u8; RESPONSE_MAX_SIZE];
     let uart = uart::UART1::new(
         pins.uart1_rx,
         pins.uart1_tx,

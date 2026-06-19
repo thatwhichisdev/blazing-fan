@@ -2,23 +2,21 @@ use crate::core::port::inbound::uart_port::{UartError, UartName, UartPort};
 
 use ariel_os::hal::uart;
 use blazing_fan_proto::{
-    FanError, UART_REQ_MAX_SIZE, UART_RES_MAX_SIZE, UartRequest, UartResponse,
+    Frame, FrameBody, FrameHeader, REQUEST_MAX_SIZE, RESPONSE_MAX_SIZE, UartRequest,
 };
-use crc::{CRC_32_ISCSI, Crc};
-use defmt::{error, info};
 use embassy_sync::{blocking_mutex::raw::CriticalSectionRawMutex, mutex::Mutex};
 use embedded_io_async::{Read as _, Write as _};
-
-const CRC32: Crc<u32> = Crc::<u32>::new(&CRC_32_ISCSI);
 
 pub struct UartAdapter<'a, P>
 where
     P: UartPort,
 {
     uart: uart::Uart<'a>,
-    rx_buf: &'a mut [u8; UART_REQ_MAX_SIZE + 4],
-    tx_buf: &'a mut [u8; UART_RES_MAX_SIZE + 4],
-    port: &'a Mutex<CriticalSectionRawMutex, P>,
+    #[allow(unused)]
+    rx_buf: &'a mut [u8; REQUEST_MAX_SIZE],
+    #[allow(unused)]
+    tx_buf: &'a mut [u8; RESPONSE_MAX_SIZE],
+    core: &'a Mutex<CriticalSectionRawMutex, P>,
     name: UartName,
 }
 
@@ -28,16 +26,16 @@ where
 {
     pub fn new(
         uart: uart::Uart<'a>,
-        rx_buf: &'a mut [u8; UART_REQ_MAX_SIZE + 4],
-        tx_buf: &'a mut [u8; UART_RES_MAX_SIZE + 4],
-        port: &'a Mutex<CriticalSectionRawMutex, P>,
+        rx_buf: &'a mut [u8; REQUEST_MAX_SIZE],
+        tx_buf: &'a mut [u8; RESPONSE_MAX_SIZE],
+        core: &'a Mutex<CriticalSectionRawMutex, P>,
         name: UartName,
     ) -> Self {
         Self {
             uart,
             rx_buf,
             tx_buf,
-            port,
+            core,
             name,
         }
     }
@@ -46,81 +44,86 @@ where
         defmt::info!("{=?}: Listener started", self.name);
 
         loop {
-            if let Err(err) = self.uart.read_exact(self.rx_buf).await {
-                error!(
-                    "{=?}: Failed to read data from port [err: {=?}]",
-                    self.name,
-                    defmt::Debug2Format(&err)
-                );
-                continue;
-            };
-
-            info!(
-                "{=?}: Read data from UART0 port [data: {=[u8]}]",
-                self.name,
-                self.rx_buf.as_slice()
-            );
-
-            let request = match postcard::from_bytes::<UartRequest>(&self.rx_buf[..]) {
-                Ok(request) => request,
-                Err(err) => {
+            let request_frame = match self.read_frame().await {
+                Ok(frame) => frame,
+                Err(e) => {
                     defmt::error!(
-                        "{}: Failed to deserialize UART request [err: {=?}]",
+                        "{}: failed to read the frame {=?}",
                         self.name,
-                        defmt::Debug2Format(&err)
+                        defmt::Debug2Format(&e)
                     );
-
-                    let response = UartResponse::Error(FanError::InvalidRequest);
-                    let data = postcard::to_slice(&response, self.tx_buf).unwrap();
-                    self.uart.write_all(data).await.unwrap();
-                    self.uart.flush().await.unwrap();
-
                     continue;
                 }
             };
 
-            let mut guard = self.port.lock().await;
-
-            match guard.request(request).await {
-                Ok(response) => {
-                    let data =
-                        postcard::to_slice_crc32(&response, self.tx_buf, CRC32.digest()).unwrap();
-                    defmt::info!(
-                        "{}: Writing response {:?} with data {=[u8]}",
-                        self.name,
-                        response,
-                        data
-                    );
-                    self.uart.write_all(data).await.unwrap();
-                    self.uart.flush().await.unwrap();
-                }
+            let request = match UartRequest::try_from(&request_frame) {
+                Ok(request) => request,
                 Err(e) => {
-                    let response = match e {
-                        UartError::EmcError(emc_err) => {
-                            defmt::error!(
-                                "{}: emc internal error [err: {=?}]",
-                                self.name,
-                                defmt::Debug2Format(&emc_err)
-                            );
-
-                            UartResponse::Error(FanError::EmcError)
-                        }
-                        UartError::RpError(mcu_err) => {
-                            defmt::error!(
-                                "{}: mcu internal error [err: {=?}]",
-                                self.name,
-                                defmt::Debug2Format(&mcu_err)
-                            );
-
-                            UartResponse::Error(FanError::McuError)
-                        }
-                    };
-
-                    let data = postcard::to_slice(&response, self.tx_buf).unwrap();
-                    self.uart.write_all(data).await.unwrap();
-                    self.uart.flush().await.unwrap();
+                    defmt::error!(
+                        "{}: failed to deserealize the frame {=?}",
+                        self.name,
+                        defmt::Debug2Format(&e)
+                    );
+                    continue;
                 }
-            }
+            };
+
+            let mut core = self.core.lock().await;
+            let response = match core.request(request).await {
+                Ok(response) => response,
+                Err(e) => {
+                    defmt::error!(
+                        "{}: error happened while processing the request {=?}",
+                        self.name,
+                        defmt::Debug2Format(&e)
+                    );
+                    continue;
+                }
+            };
+            drop(core);
+
+            let response_frame = match Frame::<RESPONSE_MAX_SIZE>::try_from(&response) {
+                Ok(frame) => frame,
+                Err(e) => {
+                    defmt::error!(
+                        "{}: failed to serealize the frame {=?}",
+                        self.name,
+                        defmt::Debug2Format(&e)
+                    );
+                    continue;
+                }
+            };
+
+            if let Err(e) = self.write_frame(response_frame).await {
+                defmt::error!(
+                    "{}: failed to write the frame {=?}",
+                    self.name,
+                    defmt::Debug2Format(&e)
+                );
+            };
         }
+    }
+
+    async fn read_frame(&mut self) -> Result<Frame<REQUEST_MAX_SIZE>, UartError> {
+        let mut header_raw = [0u8; 2];
+        self.uart.read_exact(&mut header_raw).await?;
+        let header: FrameHeader = header_raw.into();
+        defmt::info!("read header {:?}", header);
+
+        let mut body_raw = [0u8; REQUEST_MAX_SIZE];
+        let body_len = usize::from(header.length);
+        self.uart.read_exact(&mut body_raw[..body_len]).await?;
+        let body: FrameBody<REQUEST_MAX_SIZE> = FrameBody::from_slice(&body_raw)?;
+        defmt::info!("read body {:?}", body);
+
+        Ok(Frame { header, body })
+    }
+
+    async fn write_frame(&mut self, frame: Frame<RESPONSE_MAX_SIZE>) -> Result<(), UartError> {
+        self.uart.write_all(&frame.header.as_slice()).await?;
+        self.uart.write_all(frame.body.as_slice()).await?;
+        self.uart.flush().await?;
+
+        Ok(())
     }
 }
