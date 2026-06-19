@@ -23,7 +23,7 @@ static_cell = "2.1.1"
 
 blazing-fan-proto = { path = "../blazing-fan-proto" }
 
-emc2101 = { version = "2.0.1", features = ["async"] }
+emc2101 = { version = "2.0.1", features = ["async", "defmt"] }
 fugit = "0.3.7"
 bounded-integer = "0.6.0"
 smart-leds = "0.4.0"

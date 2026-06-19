@@ -8,7 +8,6 @@ use crate::core::port::outbound::status_indicator::StatusIndicator;
 
 static GREEN: [RGB8; 2] = [colors::GREEN; 2];
 static ORANGE: [RGB8; 2] = [colors::ORANGE; 2];
-static RED: [RGB8; 2] = [colors::RED; 2];
 static NONE: [RGB8; 2] = [colors::BLACK; 2];
 
 pub struct Ws2812<'a> {
@@ -22,20 +21,12 @@ impl<'a> Ws2812<'a> {
 }
 
 impl<'a> StatusIndicator for Ws2812<'a> {
-    async fn set_custom(&mut self, colors: [RGB8; 2]) {
-        self.driver.write(&colors).await;
-    }
-
     async fn set_green(&mut self) {
         self.driver.write(&GREEN).await;
     }
 
     async fn set_orange(&mut self) {
         self.driver.write(&ORANGE).await;
-    }
-
-    async fn set_red(&mut self) {
-        self.driver.write(&RED).await;
     }
 
     async fn set_none(&mut self) {

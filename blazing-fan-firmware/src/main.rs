@@ -41,46 +41,46 @@ bind_interrupts!(struct Irqs {
 });
 
 static SYSTEM: StaticCell<
-    Mutex<CriticalSectionRawMutex, System<Rp2040, Emc2101, GpioFanSupply, Ws2812>>,
+    Mutex<CriticalSectionRawMutex, System<Rp2040, Emc2101<'_>, GpioFanSupply, Ws2812>>,
 > = StaticCell::new();
 
 #[allow(clippy::type_complexity)]
 static SYSTEM_READY_SIGNAL: Watch<
     CriticalSectionRawMutex,
-    &'static Mutex<CriticalSectionRawMutex, System<Rp2040, Emc2101, GpioFanSupply, Ws2812>>,
+    &'static Mutex<CriticalSectionRawMutex, System<Rp2040, Emc2101<'_>, GpioFanSupply, Ws2812>>,
     4,
 > = Watch::new();
 
 #[ariel_os::spawner(autostart, peripherals)]
 fn boot(spawner: Spawner, peripherals: Peripherals) {
     spawner
-        .spawn(core_task(
+        .spawn(system_boot(
             peripherals.mcu_pins,
             peripherals.fan_ctrl_pins,
             peripherals.fan_supply_pin,
             peripherals.status_indicator_pins,
         ))
-        .expect("failed to spawn core_task: task instance already running");
+        .expect("failed to spawn system_boot: task instance already running");
 
     spawner
-        .spawn(button_adapter_task(peripherals.user_btn_pin))
-        .expect("failed to spawn button_adapter_task: task instance already running");
+        .spawn(system_ticker())
+        .expect("failed to spawn system_ticker: task instance already running");
 
     spawner
-        .spawn(uart_a_adapter_task(peripherals.uart_0_pins))
-        .expect("failed to spawn uart_a_adapter_task: task instance already running");
+        .spawn(user_button_listener(peripherals.user_btn_pin))
+        .expect("failed to spawn user_button_listener: task instance already running");
 
     spawner
-        .spawn(uart_b_adapter_task(peripherals.uart_1_pins))
-        .expect("failed to spawn uart_b_adapter_task: task instance already running");
+        .spawn(uart_a_listener(peripherals.uart_0_pins))
+        .expect("failed to spawn uart_a_listener: task instance already running");
 
     spawner
-        .spawn(ticker())
-        .expect("failed to spawn ticker task: task instance already running");
+        .spawn(uart_b_listener(peripherals.uart_1_pins))
+        .expect("failed to spawn uart_b_listener: task instance already running");
 }
 
 #[ariel_os::task]
-async fn core_task(
+async fn system_boot(
     pico_pins: McuPins,
     emc_pins: FanControllerPins,
     fan_pwr_pin: FanSupplyPin,
@@ -94,13 +94,18 @@ async fn core_task(
     let vsys_ch = adc::Channel::new_pin(pico_pins.vsys_ch, embassy_rp::gpio::Pull::None);
     let led_output = Output::new(pico_pins.led_output, Level::Low);
     let rp2040 = Rp2040::new(adc, temp_ch, vsys_ch, led_output);
+    defmt::info!("MCU initialized");
 
     let fan_supply_output = Output::new(fan_pwr_pin.pwr, Level::High);
     let fan_supply = GpioFanSupply::new(fan_supply_output);
+    defmt::info!("Fan supply initialized");
 
     let i2c_config = i2c::controller::Config::default();
     let i2c0 = i2c::controller::I2C0::new(emc_pins.sda, emc_pins.scl, i2c_config);
-    let emc2101 = Emc2101::new(i2c0).await;
+    let emc2101 = Emc2101::new(i2c0)
+        .await
+        .expect("failed to initialize emc2101 fan controller, check wiring");
+    defmt::info!("Fan controller initialized");
 
     let mut pio = Pio::new(ws_pins.pio, Irqs);
     let pio_program = PioWs2812Program::new(&mut pio.common);
@@ -112,6 +117,7 @@ async fn core_task(
         &pio_program,
     );
     let ws2812 = Ws2812::new(pio_driver);
+    defmt::info!("Status indicator initialized");
 
     let system: &'static _ =
         SYSTEM.init(Mutex::new(System::new(rp2040, emc2101, fan_supply, ws2812)));
@@ -120,7 +126,7 @@ async fn core_task(
 }
 
 #[ariel_os::task]
-async fn ticker() {
+async fn system_ticker() {
     let system = SYSTEM_READY_SIGNAL
         .dyn_receiver()
         .expect("receiver capacity exceeded, expected at most 4 system consumers")
@@ -140,7 +146,7 @@ async fn ticker() {
 }
 
 #[ariel_os::task]
-async fn button_adapter_task(pins: UserButtonPin) {
+async fn user_button_listener(pins: UserButtonPin) {
     let system = SYSTEM_READY_SIGNAL
         .dyn_receiver()
         .expect("receiver capacity exceeded, expected at most 4 system consumers")
@@ -156,7 +162,7 @@ async fn button_adapter_task(pins: UserButtonPin) {
 }
 
 #[ariel_os::task]
-async fn uart_a_adapter_task(pins: Uart0Pins) {
+async fn uart_a_listener(pins: Uart0Pins) {
     let system = SYSTEM_READY_SIGNAL
         .dyn_receiver()
         .expect("receiver capacity exceeded, expected at most 4 system consumers")
@@ -181,7 +187,7 @@ async fn uart_a_adapter_task(pins: Uart0Pins) {
 }
 
 #[ariel_os::task]
-async fn uart_b_adapter_task(pins: Uart1Pins) {
+async fn uart_b_listener(pins: Uart1Pins) {
     let system = SYSTEM_READY_SIGNAL
         .dyn_receiver()
         .expect("receiver capacity exceeded, expected at most 4 system consumers")

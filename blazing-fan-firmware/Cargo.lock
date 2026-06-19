@@ -763,6 +763,7 @@ dependencies = [
 name = "blazing-fan-proto"
 version = "0.1.0"
 dependencies = [
+ "defmt 1.1.0",
  "postcard",
  "serde",
 ]
@@ -2258,6 +2259,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "26c786163acb9d4a7a1ec806d4127d3dfbf0951a1d964fa7f1ab4ab8c0af806f"
 dependencies = [
  "bounded-integer",
+ "defmt 1.1.0",
  "embedded-hal 1.0.0",
  "embedded-hal-async",
  "fugit",

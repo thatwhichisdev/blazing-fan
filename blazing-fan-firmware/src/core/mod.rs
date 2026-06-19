@@ -107,7 +107,7 @@ where
                     self.fan_ctrl.set_fan_power(fan_power).await?;
                     self.telemetries.clear();
                 } else {
-                    // todo: set fan to auto mode to regulate fan rpm using controller's internal LUT table
+                    self.fan_ctrl.set_fan_auto().await?;
                 }
 
                 Ok(())
@@ -141,13 +141,21 @@ where
 {
     async fn request(&mut self, request: UartRequest) -> Result<UartResponse, UartError> {
         match request {
-            UartRequest::Ping => Ok(UartResponse::Pong),
+            UartRequest::Ping => {
+                defmt::info!("CORE: Received Ping request");
+
+                Ok(UartResponse::Pong)
+            }
             UartRequest::SetMode(mode) => {
+                defmt::info!("CORE: Received SetMode request");
+
                 self.set_mode(mode);
 
                 Ok(UartResponse::Ok)
             }
             UartRequest::Telemetry(bld_telemetry) => {
+                defmt::info!("CORE: Received Telemetry request {:?}", bld_telemetry);
+
                 let blade_temp = bld_telemetry.cpu_temp;
 
                 self.telemetries.write(blade_temp);

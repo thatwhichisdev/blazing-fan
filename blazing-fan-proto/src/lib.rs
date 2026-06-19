@@ -12,7 +12,7 @@ pub struct FanTelemetry {
     pub mcu_system_voltage: u16,
 }
 
-#[derive(Serialize, Deserialize, Debug, Eq, PartialEq, MaxSize)]
+#[derive(Serialize, Deserialize, Debug, Eq, PartialEq, MaxSize, defmt::Format)]
 pub struct BladeTelemetry {
     pub cpu_temp: i8,
 }
