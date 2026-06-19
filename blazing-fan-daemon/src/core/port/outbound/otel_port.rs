@@ -1,4 +1,4 @@
-use crate::core::sysinfo::SysInfo;
+use crate::core::sysinfo::SystemMetrics;
 use thiserror::Error;
 
 #[derive(Error, Debug)]
@@ -8,7 +8,7 @@ pub enum OtelError {
 }
 
 pub trait OtelPort {
-    fn record_sys_info(&self, sys_info: &SysInfo);
+    fn record_sys_info(&self, sys_info: &SystemMetrics);
 
     fn shutdown(&mut self) -> Result<(), OtelError>;
 }

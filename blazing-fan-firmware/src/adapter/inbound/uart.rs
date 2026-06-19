@@ -68,7 +68,7 @@ where
 
                     let response = UartResponse::Error(FanError::InvalidRequest);
                     let data = postcard::to_slice(&response, self.tx_buf).unwrap();
-                    self.uart.write(data).await.unwrap();
+                    self.uart.write_all(data).await.unwrap();
                     self.uart.flush().await.unwrap();
 
                     continue;
@@ -80,7 +80,13 @@ where
             match guard.request(request).await {
                 Ok(response) => {
                     let data = postcard::to_slice(&response, self.tx_buf).unwrap();
-                    self.uart.write(data).await.unwrap();
+                    defmt::info!(
+                        "{}: Writing response {:?} with data {=[u8]}",
+                        self.name,
+                        response,
+                        data
+                    );
+                    self.uart.write_all(data).await.unwrap();
                     self.uart.flush().await.unwrap();
                 }
                 Err(e) => {
@@ -106,7 +112,7 @@ where
                     };
 
                     let data = postcard::to_slice(&response, self.tx_buf).unwrap();
-                    self.uart.write(data).await.unwrap();
+                    self.uart.write_all(data).await.unwrap();
                     self.uart.flush().await.unwrap();
                 }
             }

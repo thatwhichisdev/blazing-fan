@@ -5,11 +5,12 @@ use crate::{
     },
     core::{
         port::outbound::{otel_port::OtelPort, uart_port::UartPort},
-        sysinfo::{SysInfo, SystemFetcher},
+        sysinfo::{SystemFetcher, SystemMetrics},
     },
 };
 
 use blazing_fan_proto::{BladeTelemetry, UartRequest, UartResponse};
+use opentelemetry::KeyValue;
 use sd_notify::NotifyState;
 use std::time::Duration;
 use tokio::{
@@ -29,11 +30,14 @@ async fn main() -> color_eyre::Result<()> {
     let config = core::config::load_config()?;
 
     let _con = DbusAdapter::build_connection().await?;
-    let syst_fetcher = SystemFetcher::new();
     let uart_adapter = UartAdapter::new(&config.uart)?;
-    let otel_adapter = OtelAdapter::new(&config.otel)?;
+    let mut syst_fetcher = SystemFetcher::new();
 
-    let (tx, _) = watch::channel(SysInfo::default());
+    let sys_info = syst_fetcher.fetch_info();
+    let attributes = [KeyValue::new("hostname", sys_info.hostname)];
+    let otel_adapter = OtelAdapter::new(&config.otel, attributes)?;
+
+    let (tx, _) = watch::channel(SystemMetrics::default());
     let uart_rx = tx.subscribe();
     let otel_rx = tx.subscribe();
 
@@ -81,12 +85,12 @@ async fn main() -> color_eyre::Result<()> {
     Ok(())
 }
 
-async fn syst_task(mut fetcher: SystemFetcher, tx: Sender<SysInfo>) {
+async fn syst_task(mut fetcher: SystemFetcher, tx: Sender<SystemMetrics>) {
     let mut ticker = interval(Duration::from_secs(9));
 
     loop {
         ticker.tick().await;
-        let sys_info = fetcher.fetch();
+        let sys_info = fetcher.fetch_metrics();
 
         if let Err(e) = tx.send(sys_info) {
             tracing::error!("Failed to dispatch system info event, {:?}", e);
@@ -96,7 +100,7 @@ async fn syst_task(mut fetcher: SystemFetcher, tx: Sender<SysInfo>) {
 
 async fn uart_task(
     mut adapter: UartAdapter,
-    mut rx: Receiver<SysInfo>,
+    mut rx: Receiver<SystemMetrics>,
     cancellation: CancellationToken,
 ) {
     let mut ticker = interval(Duration::from_secs(9));
@@ -166,7 +170,7 @@ async fn uart_task(
 
 async fn otel_task(
     mut adapter: OtelAdapter,
-    mut rx: Receiver<SysInfo>,
+    mut rx: Receiver<SystemMetrics>,
     cancellation: CancellationToken,
 ) {
     let mut ticker = interval(Duration::from_secs(9));

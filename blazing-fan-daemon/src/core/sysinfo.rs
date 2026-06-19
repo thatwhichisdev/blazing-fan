@@ -7,7 +7,12 @@ pub struct SystemFetcher {
 }
 
 #[derive(Default, Clone)]
-pub struct SysInfo {
+pub struct SystemInformation {
+    pub hostname: String,
+}
+
+#[derive(Default, Clone)]
+pub struct SystemMetrics {
     pub cpu_usage: f32,
     pub cpu_tmp: f32,
     pub mem_usage: u64,
@@ -32,7 +37,13 @@ impl SystemFetcher {
         }
     }
 
-    pub fn fetch(&mut self) -> SysInfo {
+    pub fn fetch_info(&mut self) -> SystemInformation {
+        let hostname = System::host_name().expect("hostname is not present on the system");
+
+        SystemInformation { hostname }
+    }
+
+    pub fn fetch_metrics(&mut self) -> SystemMetrics {
         self.sys.refresh_specifics(self.refresh);
         self.components.refresh(false);
 
@@ -46,7 +57,7 @@ impl SystemFetcher {
             .temperature()
             .unwrap_or(0.0);
 
-        SysInfo {
+        SystemMetrics {
             cpu_usage,
             cpu_tmp,
             mem_usage,

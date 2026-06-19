@@ -1,4 +1,4 @@
-use std::{collections::HashMap, sync::LazyLock, time::Duration};
+use std::{collections::HashMap, time::Duration};
 
 use opentelemetry::{
     KeyValue, global,
@@ -20,11 +20,8 @@ use tracing_subscriber::prelude::*;
 use crate::core::{
     config::OtelConfig,
     port::outbound::otel_port::{OtelError, OtelPort},
-    sysinfo::SysInfo,
+    sysinfo::SystemMetrics,
 };
-
-static OTEL_ATTRIBUTES: LazyLock<[KeyValue; 1]> =
-    LazyLock::new(|| [KeyValue::new::<&str, &str>("source", "sysinfo")]);
 
 struct OtelAdapterInner {
     #[allow(unused)]
@@ -32,9 +29,11 @@ struct OtelAdapterInner {
     #[allow(unused)]
     meter_provider: SdkMeterProvider,
 
-    cpu_tmp_gauge: Gauge<f64>,
+    cpu_temp_gauge: Gauge<f64>,
     cpu_usage_gauge: Gauge<f64>,
     mem_usage_gauge: Gauge<u64>,
+
+    attributes: [KeyValue; 1],
 }
 
 pub struct OtelAdapter {
@@ -42,7 +41,7 @@ pub struct OtelAdapter {
 }
 
 impl OtelAdapter {
-    pub fn new(config: &OtelConfig) -> color_eyre::Result<Self> {
+    pub fn new(config: &OtelConfig, attributes: [KeyValue; 1]) -> color_eyre::Result<Self> {
         if config.enabled {
             let log_provider = OtelAdapter::init_log_provider(config)?;
             let meter_provider = OtelAdapter::init_meter_provider(config)?;
@@ -69,9 +68,10 @@ impl OtelAdapter {
             let inner = Some(OtelAdapterInner {
                 log_provider,
                 meter_provider,
-                cpu_tmp_gauge,
+                cpu_temp_gauge: cpu_tmp_gauge,
                 cpu_usage_gauge: cpu_load_gauge,
                 mem_usage_gauge: mem_usg_gauge,
+                attributes,
             });
 
             Ok(Self { inner })
@@ -179,16 +179,16 @@ impl OtelAdapter {
 }
 
 impl OtelPort for OtelAdapter {
-    fn record_sys_info(&self, sys_info: &SysInfo) {
+    fn record_sys_info(&self, sys_info: &SystemMetrics) {
         if let Some(otel) = self.inner.as_ref() {
             otel.cpu_usage_gauge
-                .record(f64::from(sys_info.cpu_usage), OTEL_ATTRIBUTES.as_slice());
+                .record(f64::from(sys_info.cpu_usage), &otel.attributes);
 
-            otel.cpu_tmp_gauge
-                .record(f64::from(sys_info.cpu_tmp), OTEL_ATTRIBUTES.as_slice());
+            otel.cpu_temp_gauge
+                .record(f64::from(sys_info.cpu_tmp), &otel.attributes);
 
             otel.mem_usage_gauge
-                .record(sys_info.mem_usage, OTEL_ATTRIBUTES.as_slice());
+                .record(sys_info.mem_usage, &otel.attributes);
         }
     }
 
