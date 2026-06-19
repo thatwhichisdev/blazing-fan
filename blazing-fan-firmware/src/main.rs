@@ -170,8 +170,8 @@ async fn uart_a_listener(pins: Uart0Pins) {
         .await;
 
     let uart_config = uart::Config::default();
-    let mut rx_buf = [0u8; UART_REQ_MAX_SIZE];
-    let mut tx_buf = [0u8; UART_RES_MAX_SIZE];
+    let mut rx_buf = [0u8; UART_REQ_MAX_SIZE + 4];
+    let mut tx_buf = [0u8; UART_RES_MAX_SIZE + 4];
     let uart = uart::UART0::new(
         pins.uart0_rx,
         pins.uart0_tx,
@@ -195,8 +195,8 @@ async fn uart_b_listener(pins: Uart1Pins) {
         .await;
 
     let uart_config = uart::Config::default();
-    let mut rx_buf = [0u8; UART_REQ_MAX_SIZE];
-    let mut tx_buf = [0u8; UART_RES_MAX_SIZE];
+    let mut rx_buf = [0u8; UART_REQ_MAX_SIZE + 4];
+    let mut tx_buf = [0u8; UART_RES_MAX_SIZE + 4];
     let uart = uart::UART1::new(
         pins.uart1_rx,
         pins.uart1_tx,

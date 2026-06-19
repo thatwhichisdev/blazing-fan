@@ -1,6 +1,7 @@
 use std::time::Duration;
 
 use blazing_fan_proto::{UART_REQ_MAX_SIZE, UART_RES_MAX_SIZE, UartRequest, UartResponse};
+use crc::{CRC_32_ISCSI, Crc};
 use serial2_tokio::SerialPort;
 use tokio::io::AsyncWriteExt;
 
@@ -8,6 +9,8 @@ use crate::core::{
     config::UartConfig,
     port::outbound::uart_port::{UartError, UartPort},
 };
+
+const CRC32: Crc<u32> = Crc::<u32>::new(&CRC_32_ISCSI);
 
 pub struct UartAdapter {
     port: SerialPort,
@@ -24,8 +27,8 @@ impl UartAdapter {
 
 impl UartPort for UartAdapter {
     async fn request(&mut self, request: UartRequest) -> Result<UartResponse, UartError> {
-        let mut tx_buf = [0u8; UART_REQ_MAX_SIZE];
-        let mut rx_buf = [0u8; UART_RES_MAX_SIZE];
+        let mut tx_buf = [0u8; UART_REQ_MAX_SIZE + 4];
+        let mut rx_buf = [0u8; UART_RES_MAX_SIZE + 4];
         let data = postcard::to_slice(&request, &mut tx_buf)?;
 
         match self.port.write_all(data).await {
@@ -36,7 +39,7 @@ impl UartPort for UartAdapter {
                     res = self.port.read(&mut rx_buf) => {
                         match res {
                             Ok(_size) => {
-                                let response = postcard::from_bytes::<UartResponse>(&rx_buf)?;
+                                let response = postcard::from_bytes_crc32::<UartResponse>(&rx_buf, CRC32.digest())?;
 
                                 Ok(response)
                             }

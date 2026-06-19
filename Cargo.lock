@@ -337,6 +337,7 @@ dependencies = [
  "blazing-fan-proto",
  "color-eyre",
  "config",
+ "crc",
  "directories",
  "opentelemetry",
  "opentelemetry-appender-tracing",

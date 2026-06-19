@@ -1,19 +1,23 @@
 use crate::core::port::inbound::uart_port::{UartError, UartName, UartPort};
+
 use ariel_os::hal::uart;
 use blazing_fan_proto::{
     FanError, UART_REQ_MAX_SIZE, UART_RES_MAX_SIZE, UartRequest, UartResponse,
 };
+use crc::{CRC_32_ISCSI, Crc};
 use defmt::{error, info};
 use embassy_sync::{blocking_mutex::raw::CriticalSectionRawMutex, mutex::Mutex};
 use embedded_io_async::{Read as _, Write as _};
+
+const CRC32: Crc<u32> = Crc::<u32>::new(&CRC_32_ISCSI);
 
 pub struct UartAdapter<'a, P>
 where
     P: UartPort,
 {
     uart: uart::Uart<'a>,
-    rx_buf: &'a mut [u8; UART_REQ_MAX_SIZE],
-    tx_buf: &'a mut [u8; UART_RES_MAX_SIZE],
+    rx_buf: &'a mut [u8; UART_REQ_MAX_SIZE + 4],
+    tx_buf: &'a mut [u8; UART_RES_MAX_SIZE + 4],
     port: &'a Mutex<CriticalSectionRawMutex, P>,
     name: UartName,
 }
@@ -24,8 +28,8 @@ where
 {
     pub fn new(
         uart: uart::Uart<'a>,
-        rx_buf: &'a mut [u8; UART_REQ_MAX_SIZE],
-        tx_buf: &'a mut [u8; UART_RES_MAX_SIZE],
+        rx_buf: &'a mut [u8; UART_REQ_MAX_SIZE + 4],
+        tx_buf: &'a mut [u8; UART_RES_MAX_SIZE + 4],
         port: &'a Mutex<CriticalSectionRawMutex, P>,
         name: UartName,
     ) -> Self {
@@ -79,7 +83,8 @@ where
 
             match guard.request(request).await {
                 Ok(response) => {
-                    let data = postcard::to_slice(&response, self.tx_buf).unwrap();
+                    let data =
+                        postcard::to_slice_crc32(&response, self.tx_buf, CRC32.digest()).unwrap();
                     defmt::info!(
                         "{}: Writing response {:?} with data {=[u8]}",
                         self.name,
