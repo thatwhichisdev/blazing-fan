@@ -37,7 +37,7 @@ impl UartAdapter {
         let body_len = usize::from(header.length);
         self.port.read_exact(&mut body_raw[..body_len]).await?;
 
-        let body = FrameBody::<RESPONSE_MAX_SIZE>::from_slice(&body_raw)?;
+        let body = FrameBody::<RESPONSE_MAX_SIZE>::from_slice(&body_raw[..body_len])?;
 
         Ok(Frame { header, body })
     }

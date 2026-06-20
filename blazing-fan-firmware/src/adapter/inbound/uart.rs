@@ -113,7 +113,7 @@ where
         let mut body_raw = [0u8; REQUEST_MAX_SIZE];
         let body_len = usize::from(header.length);
         self.uart.read_exact(&mut body_raw[..body_len]).await?;
-        let body: FrameBody<REQUEST_MAX_SIZE> = FrameBody::from_slice(&body_raw)?;
+        let body: FrameBody<REQUEST_MAX_SIZE> = FrameBody::from_slice(&body_raw[..body_len])?;
         defmt::info!("read body {:?}", body);
 
         Ok(Frame { header, body })
