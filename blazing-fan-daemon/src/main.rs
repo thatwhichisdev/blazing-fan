@@ -98,7 +98,7 @@ async fn main() -> color_eyre::Result<()> {
 }
 
 async fn syst_task(mut fetcher: SystemFetcher, tx: Sender<SystemMetrics>) {
-    let mut ticker = interval(Duration::from_secs(9));
+    let mut ticker = interval(Duration::from_secs(60));
 
     loop {
         ticker.tick().await;
@@ -116,7 +116,7 @@ async fn uart_task(
     tx: Sender<FanTelemetry>,
     cancellation: CancellationToken,
 ) {
-    let mut ticker = interval(Duration::from_secs(30));
+    let mut ticker = interval(Duration::from_secs(60));
     let mut attemp: u8 = 0;
     let mut broken: bool = true;
 

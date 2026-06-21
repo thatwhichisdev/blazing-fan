@@ -164,7 +164,7 @@ impl OtelAdapter {
             .with_endpoint(metric_url)
             .with_headers(headers)
             .with_compression(Compression::Zstd)
-            .with_temporality(Temporality::Delta)
+            .with_temporality(Temporality::LowMemory)
             .build()?;
 
         let resource = Resource::builder()
