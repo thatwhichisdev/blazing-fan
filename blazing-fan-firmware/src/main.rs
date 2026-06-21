@@ -133,7 +133,7 @@ async fn system_ticker() {
         .get()
         .await;
 
-    let mut ticker = Ticker::every(Duration::from_secs(1));
+    let mut ticker = Ticker::every(Duration::from_secs(9));
 
     loop {
         ticker.next().await;

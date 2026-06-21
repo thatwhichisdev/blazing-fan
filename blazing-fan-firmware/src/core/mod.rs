@@ -94,15 +94,13 @@ where
                     self.status_indicator.set_green().await;
 
                     let fan_power_u8 = match temp {
-                        i8::MIN..=44 => 0,
-                        45..=49 => 13,
-                        50..=54 => 19,
-                        55..=59 => 25,
-                        60..=64 => 32,
-                        65..=69 => 41,
-                        70..=74 => 50,
-                        75..=79 => 57,
-                        80..=i8::MAX => 63,
+                        i8::MIN..=20 => 0,
+                        21..=25 => 3,
+                        26..=30 => 5,
+                        31..=35 => 7,
+                        36..=40 => 9,
+                        41..=55 => 13,
+                        56..=i8::MAX => 16,
                     };
 
                     let fan_power = BoundedU8::<0, 63>::new(fan_power_u8)
@@ -119,8 +117,6 @@ where
                     self.status_indicator.set_purple().await;
                     self.fan_ctrl.set_fan_auto().await?;
                 }
-
-                Ok(())
             }
             OperatingMode::Full => {
                 defmt::info!("Fan set to mode {=?}", self.operating_mode);
@@ -128,8 +124,6 @@ where
                 self.mcu.led_on();
                 self.status_indicator.set_orange().await;
                 self.fan_ctrl.set_fan_power_max().await?;
-
-                Ok(())
             }
             OperatingMode::Idle => {
                 defmt::info!("Fan set to mode {=?}", self.operating_mode);
@@ -137,10 +131,15 @@ where
                 self.fan_supply.disable();
                 self.mcu.led_off();
                 self.status_indicator.set_none().await;
-
-                Ok(())
             }
         }
+
+        let fan_rpm = self.fan_ctrl.get_fan_rpm().await?;
+        defmt::info!("fan rpm: {=u16}", fan_rpm);
+        let fan_ctrl_temp_external = self.fan_ctrl.get_fan_tmp_external().await?;
+        defmt::info!("fan ctrl temp external: {=i8}", fan_ctrl_temp_external);
+
+        Ok(())
     }
 }
 

@@ -12,7 +12,7 @@ use opentelemetry_otlp::{
 use opentelemetry_sdk::{
     Resource,
     logs::{SdkLoggerProvider, log_processor_with_async_runtime::BatchLogProcessor},
-    metrics::{SdkMeterProvider, periodic_reader_with_async_runtime::PeriodicReader},
+    metrics::{SdkMeterProvider, Temporality, periodic_reader_with_async_runtime::PeriodicReader},
     runtime::Tokio,
 };
 use tracing_subscriber::EnvFilter;
@@ -119,7 +119,6 @@ impl OtelAdapter {
             .with_protocol(Protocol::HttpBinary)
             .with_headers(headers)
             .with_compression(Compression::Zstd)
-            .with_timeout(Duration::from_secs(10))
             .build()?;
 
         let resource = Resource::builder()
@@ -164,17 +163,15 @@ impl OtelAdapter {
             .with_protocol(Protocol::HttpBinary)
             .with_endpoint(metric_url)
             .with_headers(headers)
-            .with_timeout(Duration::from_secs(5))
             .with_compression(Compression::Zstd)
+            .with_temporality(Temporality::Delta)
             .build()?;
 
         let resource = Resource::builder()
             .with_service_name(config.service_name.clone())
             .build();
 
-        let reader = PeriodicReader::builder(exporter, Tokio)
-            .with_interval(Duration::from_secs(60))
-            .build();
+        let reader = PeriodicReader::builder(exporter, Tokio).build();
 
         let provider = SdkMeterProvider::builder()
             .with_resource(resource)

@@ -19,7 +19,12 @@ impl<'a> Emc2101<'a> {
         let lut = FAN_LUT.init(Self::lut());
 
         emc.enable_tach_input().await?;
-        emc.set_fan_pwm(Rate::<u32, _, _>::kHz(25), false).await?;
+        emc.set_fan_pwm(
+            Rate::<u32, _, _>::Hz(22_500),
+            false,
+            Some(BoundedU8::<1, 31>::new(8).unwrap()),
+        )
+        .await?;
 
         Ok(Self { emc, lut })
     }
@@ -34,21 +39,21 @@ impl<'a> Emc2101<'a> {
     fn lut() -> Vec<Level, 8> {
         let mut lut = Vec::<Level, 8>::new();
 
-        lut.push(Self::lut_level(1, 13))
+        lut.push(Self::lut_level(1, 3))
             .expect("LUT must fit into 8 entries");
-        lut.push(Self::lut_level(45, 16))
+        lut.push(Self::lut_level(20, 4))
             .expect("LUT must fit into 8 entries");
-        lut.push(Self::lut_level(50, 22))
+        lut.push(Self::lut_level(25, 6))
             .expect("LUT must fit into 8 entries");
-        lut.push(Self::lut_level(55, 28))
+        lut.push(Self::lut_level(30, 7))
             .expect("LUT must fit into 8 entries");
-        lut.push(Self::lut_level(60, 35))
+        lut.push(Self::lut_level(35, 9))
             .expect("LUT must fit into 8 entries");
-        lut.push(Self::lut_level(65, 44))
+        lut.push(Self::lut_level(40, 11))
             .expect("LUT must fit into 8 entries");
-        lut.push(Self::lut_level(70, 54))
+        lut.push(Self::lut_level(45, 14))
             .expect("LUT must fit into 8 entries");
-        lut.push(Self::lut_level(75, 63))
+        lut.push(Self::lut_level(50, 16))
             .expect("LUT must fit into 8 entries");
 
         lut
