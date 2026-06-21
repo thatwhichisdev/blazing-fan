@@ -7,6 +7,7 @@ use smart_leds::{
 use crate::core::port::outbound::status_indicator::StatusIndicator;
 
 static GREEN: [RGB8; 2] = [colors::GREEN; 2];
+static PURPLE: [RGB8; 2] = [colors::PURPLE; 2];
 static ORANGE: [RGB8; 2] = [colors::ORANGE; 2];
 static NONE: [RGB8; 2] = [colors::BLACK; 2];
 
@@ -23,6 +24,10 @@ impl<'a> Ws2812<'a> {
 impl<'a> StatusIndicator for Ws2812<'a> {
     async fn set_green(&mut self) {
         self.driver.write(&GREEN).await;
+    }
+
+    async fn set_purple(&mut self) {
+        self.driver.write(&PURPLE).await;
     }
 
     async fn set_orange(&mut self) {

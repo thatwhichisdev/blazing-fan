@@ -165,6 +165,7 @@ async fn uart_task(
                             },
                         }
                         Err(err) => {
+                            broken = true;
                             tracing::error!("failed to send uart request {:?}", err);
                         },
                     }

@@ -58,7 +58,17 @@ impl UartPort for UartAdapter {
         let request_frame = Frame::<REQUEST_MAX_SIZE>::try_from(&request)?;
         self.write_frame(request_frame).await?;
 
-        let response_frame = self.read_frame().await?;
+        let response_frame = match tokio::time::timeout(
+            std::time::Duration::from_secs(9),
+            self.read_frame(),
+        )
+        .await
+        {
+            Ok(Ok(response)) => response,
+            Ok(Err(e)) => return Err(e),
+            Err(e) => return Err(UartError::Timeout(e)),
+        };
+
         let response = UartResponse::try_from(&response_frame)?;
 
         Ok(response)

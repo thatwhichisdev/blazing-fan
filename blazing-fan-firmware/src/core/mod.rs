@@ -24,6 +24,7 @@ pub enum SystemError {
     FanControllerError(#[from] FanControllerError),
 }
 
+#[derive(defmt::Format)]
 enum OperatingMode {
     Auto,
     Full,
@@ -84,11 +85,14 @@ where
     pub async fn tick(&mut self) -> Result<(), SystemError> {
         match self.operating_mode {
             OperatingMode::Auto => {
-                self.fan_supply.enable();
-                self.mcu.led_on();
-                self.status_indicator.set_green().await;
+                defmt::info!("Fan set to mode {=?}", self.operating_mode);
 
                 if let Some(temp) = self.telemetries.iter().max() {
+                    defmt::info!("Using telemetry to set fan power");
+                    self.fan_supply.enable();
+                    self.mcu.led_on();
+                    self.status_indicator.set_green().await;
+
                     let fan_power_u8 = match temp {
                         i8::MIN..=44 => 0,
                         45..=49 => 13,
@@ -102,17 +106,24 @@ where
                     };
 
                     let fan_power = BoundedU8::<0, 63>::new(fan_power_u8)
-                        .expect("fan_power_u8 value is not in the range from 0 to 63");
+                        .expect("fan_power_u8 value is not in the range 0..=63");
 
                     self.fan_ctrl.set_fan_power(fan_power).await?;
                     self.telemetries.clear();
                 } else {
+                    defmt::info!(
+                        "No telemetry provided, fan power automatically set based on look-up table"
+                    );
+                    self.fan_supply.enable();
+                    self.mcu.led_on();
+                    self.status_indicator.set_purple().await;
                     self.fan_ctrl.set_fan_auto().await?;
                 }
 
                 Ok(())
             }
             OperatingMode::Full => {
+                defmt::info!("Fan set to mode {=?}", self.operating_mode);
                 self.fan_supply.enable();
                 self.mcu.led_on();
                 self.status_indicator.set_orange().await;
@@ -121,6 +132,7 @@ where
                 Ok(())
             }
             OperatingMode::Idle => {
+                defmt::info!("Fan set to mode {=?}", self.operating_mode);
                 self.fan_ctrl.set_fan_power_min().await?;
                 self.fan_supply.disable();
                 self.mcu.led_off();
