@@ -24,8 +24,16 @@ where
     pub async fn start(&mut self) {
         loop {
             match self.button.update().await {
+                async_button::ButtonEvent::ShortPress { count: 0 } => {
+                    defmt::warn!("BUTTON: Ignoring startup event");
+                }
+                async_button::ButtonEvent::ShortPress { count: 9 } => {
+                    defmt::info!("BUTTON: Rebooting system");
+                    ariel_os::power::reboot();
+                }
                 async_button::ButtonEvent::ShortPress { count } => {
                     defmt::info!("BUTTON: User pressed {=usize} times in the row", count);
+                    ariel_os::power::reboot();
                 }
                 async_button::ButtonEvent::LongPress => {
                     defmt::info!("BUTTON: User made long press");
