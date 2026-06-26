@@ -3,12 +3,17 @@ use sysinfo::{
     ProcessRefreshKind, RefreshKind, System,
 };
 
+use crate::core::config::SystemConfig;
+
+static TEMP_SENSOR: &'static str = "hwmon_0_1";
+
 pub struct SystemFetcher {
     system: System,
     disks: Disks,
     networks: Networks,
     components: Components,
     refresh: RefreshKind,
+    config: SystemConfig,
 }
 
 #[derive(Default, Clone)]
@@ -17,15 +22,41 @@ pub struct SystemInformation {
 }
 
 #[derive(Default, Clone)]
-pub struct SystemMetrics {
-    pub cpu_usage: f32,
-    pub cpu_tmp: f32,
-    pub mem_usage: u64,
+pub struct CpuTelemetry {
+    pub usage: f32,
+    pub temp: f32,
+}
+
+#[derive(Default, Clone)]
+pub struct MemoryTelemetry {
+    pub ram_usage: u64,
     pub swap_usage: u64,
 }
 
+#[derive(Default, Clone)]
+pub struct DiskTelemetry {
+    pub name: String,
+    pub total: u64,
+    pub available: u64,
+}
+
+#[derive(Default, Clone)]
+pub struct NetworkInterfaceTelemetry {
+    pub name: String,
+    pub received: u64,
+    pub transmitted: u64,
+}
+
+#[derive(Default, Clone)]
+pub struct BladeTelemetry {
+    pub cpu: CpuTelemetry,
+    pub memory: MemoryTelemetry,
+    pub disks: Vec<DiskTelemetry>,
+    pub networks: Vec<NetworkInterfaceTelemetry>,
+}
+
 impl SystemFetcher {
-    pub fn new() -> Self {
+    pub fn new(config: &SystemConfig) -> Self {
         let processes_refresh = ProcessRefreshKind::nothing().with_tasks();
         let cpu_refresh = CpuRefreshKind::nothing().with_cpu_usage().with_frequency();
         let mem_refresh = MemoryRefreshKind::nothing().with_ram().with_swap();
@@ -48,6 +79,7 @@ impl SystemFetcher {
             networks,
             components,
             refresh,
+            config: config.clone(),
         }
     }
 
@@ -57,56 +89,61 @@ impl SystemFetcher {
         SystemInformation { hostname }
     }
 
-    pub fn fetch_metrics(&mut self) -> SystemMetrics {
+    pub fn fetch_metrics(&mut self) -> BladeTelemetry {
         self.system.refresh_specifics(self.refresh);
         self.disks.refresh(false);
+        self.networks.refresh(false);
         self.components.refresh(false);
 
         let cpu_usage = self.system.global_cpu_usage();
         let cpu_tmp = self
             .components
             .iter_mut()
-            .find(|c| c.id() == Some("hwmon0_1"))
+            .find(|c| c.id() == Some(TEMP_SENSOR))
             .unwrap()
             .temperature()
             .unwrap_or(0.0);
+        let cpu_telemetry = CpuTelemetry {
+            usage: cpu_usage,
+            temp: cpu_tmp,
+        };
 
-        let mem_usage = self.system.used_memory();
+        let ram_usage = self.system.used_memory();
         let swap_usage = self.system.used_swap();
-
-        for disk in &self.disks {
-            tracing::info!(
-                "{:?} - disk, {:?} - kind, {:?} - total space, {:?} - available space",
-                disk.name(),
-                disk.kind(),
-                disk.total_space(),
-                disk.available_space()
-            );
-        }
-
-        for (interface, data) in &self.networks {
-            tracing::info!(
-                "{:?} - interface, {:?} - received, {:?} - transmitted",
-                interface,
-                data.received(),
-                data.transmitted()
-            );
-        }
-
-        for component in &self.components {
-            tracing::info!(
-                "{:?} - id, {:?} - label, {:?} - temperature",
-                component.id(),
-                component.label(),
-                component.temperature()
-            );
-        }
-
-        SystemMetrics {
-            cpu_usage,
-            cpu_tmp,
-            mem_usage,
+        let memory_telemetry = MemoryTelemetry {
+            ram_usage,
             swap_usage,
+        };
+
+        let mut disks_telemetry = vec![];
+        for disk in &self.disks {
+            // todo: is there a better way to map &OsStr into String?
+            let disk_name = disk.name().to_os_string().into_string().unwrap();
+            if self.config.disks.contains(&disk_name) {
+                disks_telemetry.push(DiskTelemetry {
+                    name: disk_name,
+                    total: disk.total_space(),
+                    available: disk.available_space(),
+                });
+            }
+        }
+
+        let mut networks_telemetry = vec![];
+        for (interface, data) in &self.networks {
+            if self.config.networks.contains(interface) {
+                networks_telemetry.push(NetworkInterfaceTelemetry {
+                    name: interface.clone(),
+                    received: data.received(),
+                    transmitted: data.transmitted(),
+                });
+            }
+        }
+
+        BladeTelemetry {
+            cpu: cpu_telemetry,
+            memory: memory_telemetry,
+            disks: disks_telemetry,
+            networks: networks_telemetry,
         }
     }
 }

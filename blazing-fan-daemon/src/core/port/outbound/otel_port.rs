@@ -1,4 +1,4 @@
-use crate::core::sysinfo::SystemMetrics;
+use crate::core::sysinfo::BladeTelemetry;
 use blazing_fan_proto::FanTelemetry;
 use thiserror::Error;
 
@@ -9,9 +9,9 @@ pub enum OtelError {
 }
 
 pub trait OtelPort {
-    fn record_sys_info(&self, sys_info: &SystemMetrics);
+    fn record_blade_telemetry(&mut self, sys_info: &BladeTelemetry);
 
-    fn recond_fan_telemetry(&self, fan_telemetry: &FanTelemetry);
+    fn recond_fan_telemetry(&mut self, fan_telemetry: &FanTelemetry);
 
     fn shutdown(&mut self) -> Result<(), OtelError>;
 }

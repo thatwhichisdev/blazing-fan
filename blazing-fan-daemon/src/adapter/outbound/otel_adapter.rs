@@ -21,19 +21,15 @@ use tracing_subscriber::prelude::*;
 use crate::core::{
     config::OtelConfig,
     port::outbound::otel_port::{OtelError, OtelPort},
-    sysinfo::SystemMetrics,
+    sysinfo::BladeTelemetry,
 };
 
 struct OtelAdapterInner {
-    #[allow(unused)]
-    log_provider: SdkLoggerProvider,
-    #[allow(unused)]
-    meter_provider: SdkMeterProvider,
+    logger: SdkLoggerProvider,
+    meter: SdkMeterProvider,
 
-    cpu_temp_gauge: Gauge<f64>,
-    cpu_usage_gauge: Gauge<f64>,
-    mem_usage_gauge: Gauge<u64>,
-    fan_rpm_gauge: Gauge<u64>,
+    f64_gauges: HashMap<String, Gauge<f64>>,
+    u64_gauges: HashMap<String, Gauge<u64>>,
 
     attributes: [KeyValue; 1],
 }
@@ -45,41 +41,13 @@ pub struct OtelAdapter {
 impl OtelAdapter {
     pub fn new(config: &OtelConfig, attributes: [KeyValue; 1]) -> color_eyre::Result<Self> {
         if config.enabled {
-            let log_provider = OtelAdapter::init_log_provider(config)?;
-            let meter_provider = OtelAdapter::init_meter_provider(config)?;
-            let meter = meter_provider.meter("blazing-fan-daemon");
-
-            let cpu_tmp_gauge = meter
-                .f64_gauge("system.cpu.temperature")
-                .with_description("CPU temperature reported by sysinfo component")
-                .with_unit("Cel")
-                .build();
-
-            let cpu_load_gauge = meter
-                .f64_gauge("system.cpu.load")
-                .with_description("CPU load reported by sysinfo component")
-                .with_unit("Percentage")
-                .build();
-
-            let mem_usg_gauge = meter
-                .u64_gauge("system.memory.usage")
-                .with_description("Memory usage reported by sysinfo component")
-                .with_unit("bytes")
-                .build();
-
-            let fan_rpm_gauge = meter
-                .u64_gauge("fan.rpm")
-                .with_description("RPM of the fan")
-                .with_unit("rpm")
-                .build();
-
+            let logger = OtelAdapter::init_log_provider(config)?;
+            let meter = OtelAdapter::init_meter_provider(config)?;
             let inner = Some(OtelAdapterInner {
-                log_provider,
-                meter_provider,
-                cpu_temp_gauge: cpu_tmp_gauge,
-                cpu_usage_gauge: cpu_load_gauge,
-                mem_usage_gauge: mem_usg_gauge,
-                fan_rpm_gauge,
+                logger,
+                meter,
+                f64_gauges: HashMap::new(),
+                u64_gauges: HashMap::new(),
                 attributes,
             });
 
@@ -182,33 +150,116 @@ impl OtelAdapter {
 
         Ok(provider)
     }
-}
 
-impl OtelPort for OtelAdapter {
-    fn record_sys_info(&self, sys_info: &SystemMetrics) {
-        if let Some(otel) = self.inner.as_ref() {
-            otel.cpu_usage_gauge
-                .record(f64::from(sys_info.cpu_usage), &otel.attributes);
+    fn record_u64_metric(&mut self, name: String, value: u64, description: String, unit: String) {
+        if let Some(otel) = self.inner.as_mut() {
+            match otel.u64_gauges.get(&name) {
+                Some(gauge) => gauge.record(value, &otel.attributes),
+                None => {
+                    let gauge = otel
+                        .meter
+                        .meter("blazing-fan-daemon")
+                        .u64_gauge(name.clone())
+                        .with_description(description)
+                        .with_unit(unit)
+                        .build();
 
-            otel.cpu_temp_gauge
-                .record(f64::from(sys_info.cpu_tmp), &otel.attributes);
-
-            otel.mem_usage_gauge
-                .record(sys_info.mem_usage, &otel.attributes);
+                    otel.u64_gauges.insert(name, gauge);
+                }
+            }
         }
     }
 
-    fn recond_fan_telemetry(&self, fan_telemetry: &FanTelemetry) {
-        if let Some(otel) = self.inner.as_ref() {
-            otel.fan_rpm_gauge
-                .record(fan_telemetry.fan_rpm as u64, &otel.attributes);
+    fn record_f64_metric(&mut self, name: String, value: f64, description: String, unit: String) {
+        if let Some(otel) = self.inner.as_mut() {
+            match otel.f64_gauges.get(&name) {
+                Some(gauge) => gauge.record(value, &otel.attributes),
+                None => {
+                    let gauge = otel
+                        .meter
+                        .meter("blazing-fan-daemon")
+                        .f64_gauge(name.clone())
+                        .with_description(description)
+                        .with_unit(unit)
+                        .build();
+
+                    otel.f64_gauges.insert(name, gauge);
+                }
+            }
         }
+    }
+}
+
+impl OtelPort for OtelAdapter {
+    fn record_blade_telemetry(&mut self, sys_info: &BladeTelemetry) {
+        self.record_f64_metric(
+            String::from("system.cpu.usage"),
+            f64::from(sys_info.cpu.usage),
+            String::from("system cpu usage"),
+            String::from("percentage"),
+        );
+
+        self.record_f64_metric(
+            String::from("system.cpu.temp"),
+            f64::from(sys_info.cpu.temp),
+            String::from("system cpu temp"),
+            String::from("celcius"),
+        );
+
+        self.record_u64_metric(
+            String::from("system.memory.ram.usage"),
+            sys_info.memory.ram_usage,
+            String::from("system memory ram usage"),
+            String::from("bytes"),
+        );
+
+        self.record_u64_metric(
+            String::from("system.memory.swap.usage"),
+            sys_info.memory.swap_usage,
+            String::from("system memory swap usage"),
+            String::from("bytes"),
+        );
+
+        for disk in sys_info.disks.iter() {
+            let name = disk.name.clone();
+            self.record_u64_metric(
+                format!("system.disk.{name}.available"),
+                disk.available,
+                String::from("system disk usage"),
+                String::from("bytes"),
+            );
+        }
+
+        for interface in sys_info.networks.iter() {
+            let name = interface.name.clone();
+            self.record_u64_metric(
+                format!("system.interface.{name}.received"),
+                interface.received,
+                String::from("system network interface received"),
+                String::from("bytes"),
+            );
+            self.record_u64_metric(
+                format!("system.interface.{name}.transmitted"),
+                interface.transmitted,
+                String::from("system network interface transmitted"),
+                String::from("bytes"),
+            );
+        }
+    }
+
+    fn recond_fan_telemetry(&mut self, fan_telemetry: &FanTelemetry) {
+        self.record_u64_metric(
+            String::from("fan.rpm"),
+            fan_telemetry.fan_rpm as u64,
+            String::from("fan rpm"),
+            String::from("rpm"),
+        );
     }
 
     fn shutdown(&mut self) -> Result<(), OtelError> {
         if let Some(otel) = self.inner.as_ref() {
-            otel.log_provider.shutdown()?;
-            otel.meter_provider.shutdown()?;
+            otel.logger.shutdown()?;
+            otel.meter.shutdown()?;
         }
 
         Ok(())

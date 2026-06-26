@@ -15,7 +15,7 @@ pub struct UartAdapter {
 
 impl UartAdapter {
     pub fn new(config: &UartConfig) -> Result<Self, UartError> {
-        let port = SerialPort::open("/dev/ttyAMA4", |mut settings: Settings| {
+        let port = SerialPort::open(&config.path, |mut settings: Settings| {
             settings.set_raw();
             settings.set_baud_rate(config.baud_rate)?;
             settings.set_char_size(CharSize::Bits8);

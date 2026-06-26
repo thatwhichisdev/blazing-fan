@@ -5,9 +5,17 @@ use serde::Deserialize;
 #[derive(Debug, Clone, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct AppConfig {
+    pub system: SystemConfig,
     pub uart: UartConfig,
     pub polling: PollingConfig,
     pub otel: OtelConfig,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct SystemConfig {
+    pub disks: Vec<String>,
+    pub networks: Vec<String>,
 }
 
 #[derive(Debug, Clone, Deserialize)]

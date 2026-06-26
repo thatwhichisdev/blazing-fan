@@ -5,11 +5,11 @@ use crate::{
     },
     core::{
         port::outbound::{otel_port::OtelPort, uart_port::UartPort},
-        sysinfo::{SystemFetcher, SystemMetrics},
+        sysinfo::{BladeTelemetry, SystemFetcher},
     },
 };
 
-use blazing_fan_proto::{BladeTelemetry, FanTelemetry, UartRequest, UartResponse};
+use blazing_fan_proto::{FanTelemetry, UartRequest, UartResponse};
 use opentelemetry::KeyValue;
 use sd_notify::NotifyState;
 use std::time::Duration;
@@ -31,13 +31,13 @@ async fn main() -> color_eyre::Result<()> {
 
     let _con = DbusAdapter::build_connection().await?;
     let uart_adapter = UartAdapter::new(&config.uart)?;
-    let mut syst_fetcher = SystemFetcher::new();
+    let mut syst_fetcher = SystemFetcher::new(&config.system);
 
     let sys_info = syst_fetcher.fetch_info();
     let attributes = [KeyValue::new("hostname", sys_info.hostname)];
     let otel_adapter = OtelAdapter::new(&config.otel, attributes)?;
 
-    let (system_metrics_tx, _) = watch::channel(SystemMetrics::default());
+    let (system_metrics_tx, _) = watch::channel(BladeTelemetry::default());
     let system_metrics_uart_rx = system_metrics_tx.subscribe();
     let system_metrics_otel_rx = system_metrics_tx.subscribe();
 
@@ -97,7 +97,7 @@ async fn main() -> color_eyre::Result<()> {
     Ok(())
 }
 
-async fn syst_task(mut fetcher: SystemFetcher, tx: Sender<SystemMetrics>) {
+async fn syst_task(mut fetcher: SystemFetcher, tx: Sender<BladeTelemetry>) {
     let mut ticker = interval(Duration::from_secs(60));
 
     loop {
@@ -112,7 +112,7 @@ async fn syst_task(mut fetcher: SystemFetcher, tx: Sender<SystemMetrics>) {
 
 async fn uart_task(
     mut adapter: UartAdapter,
-    mut rx: Receiver<SystemMetrics>,
+    mut rx: Receiver<BladeTelemetry>,
     tx: Sender<FanTelemetry>,
     cancellation: CancellationToken,
 ) {
@@ -145,8 +145,8 @@ async fn uart_task(
                     }
                 } else {
                     let sys_info = rx.borrow_and_update().to_owned();
-                    let cpu_temp = sys_info.cpu_tmp.round() as i8;
-                    let telemetry = BladeTelemetry { cpu_temp };
+                    let cpu_temp = sys_info.cpu.usage.round() as i8;
+                    let telemetry = blazing_fan_proto::BladeTelemetry { cpu_temp };
 
                     match adapter
                         .request(UartRequest::Telemetry(telemetry))
@@ -184,7 +184,7 @@ async fn uart_task(
 
 async fn otel_task(
     mut adapter: OtelAdapter,
-    mut system_metrics_rx: Receiver<SystemMetrics>,
+    mut system_metrics_rx: Receiver<BladeTelemetry>,
     mut fan_telemetry_rx: Receiver<FanTelemetry>,
     cancellation: CancellationToken,
 ) {
@@ -192,7 +192,7 @@ async fn otel_task(
         tokio::select! {
             _ = system_metrics_rx.changed() => {
                 let sys_info = system_metrics_rx.borrow().to_owned();
-                adapter.record_sys_info(&sys_info);
+                adapter.record_blade_telemetry(&sys_info);
             }
             _ = fan_telemetry_rx.changed() => {
                 let fan_telemetry = fan_telemetry_rx.borrow().to_owned();
