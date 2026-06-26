@@ -254,6 +254,34 @@ impl OtelPort for OtelAdapter {
             String::from("fan rpm"),
             String::from("rpm"),
         );
+
+        self.record_u64_metric(
+            String::from("fan.emc.temp.internal"),
+            fan_telemetry.fan_ctrl_temp_internal as u64,
+            String::from("fan emc internal temperature"),
+            String::from("celcius"),
+        );
+
+        self.record_u64_metric(
+            String::from("fan.emc.temp.external"),
+            fan_telemetry.fan_ctrl_temp_external as u64,
+            String::from("fan emc external temperature"),
+            String::from("celcius"),
+        );
+
+        self.record_u64_metric(
+            String::from("fan.mcu.temp"),
+            fan_telemetry.mcu_internal_temp as u64,
+            String::from("fan mcu temperature"),
+            String::from("celcius"),
+        );
+
+        self.record_u64_metric(
+            String::from("fan.mcu.voltage"),
+            fan_telemetry.mcu_system_voltage as u64,
+            String::from("fan mcu voltage"),
+            String::from("mini volts"),
+        );
     }
 
     fn shutdown(&mut self) -> Result<(), OtelError> {

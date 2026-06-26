@@ -103,6 +103,9 @@ impl SystemFetcher {
             .unwrap()
             .temperature()
             .unwrap_or(0.0);
+
+        tracing::info!("cpu temp {}", cpu_tmp);
+
         let cpu_telemetry = CpuTelemetry {
             usage: cpu_usage,
             temp: cpu_tmp,
@@ -117,6 +120,13 @@ impl SystemFetcher {
 
         let mut disks_telemetry = vec![];
         for disk in &self.disks {
+            tracing::info!(
+                "disk {} with total {} and available {}",
+                disk.name().to_os_string().into_string().unwrap(),
+                disk.total_space(),
+                disk.available_space()
+            );
+
             // todo: is there a better way to map &OsStr into String?
             let disk_name = disk.name().to_os_string().into_string().unwrap();
             if self.config.disks.contains(&disk_name) {
