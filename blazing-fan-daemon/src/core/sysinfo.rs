@@ -5,7 +5,7 @@ use sysinfo::{
 
 use crate::core::config::SystemConfig;
 
-static TEMP_SENSOR: &'static str = "hwmon_0_1";
+static TEMP_SENSOR: &'static str = "hwmon0_1";
 
 pub struct SystemFetcher {
     system: System,
