@@ -145,7 +145,7 @@ async fn uart_task(
                     }
                 } else {
                     let sys_info = rx.borrow_and_update().to_owned();
-                    let cpu_temp = sys_info.cpu.usage.round() as i8;
+                    let cpu_temp = sys_info.cpu.temp.round() as i8;
                     let telemetry = blazing_fan_proto::BladeTelemetry { cpu_temp };
 
                     match adapter

@@ -222,6 +222,14 @@ impl OtelPort for OtelAdapter {
 
         for disk in sys_info.disks.iter() {
             let name = disk.name.clone();
+
+            self.record_u64_metric(
+                format!("system.disk.{name}.total"),
+                disk.total,
+                String::from("system disk total"),
+                String::from("bytes"),
+            );
+
             self.record_u64_metric(
                 format!("system.disk.{name}.available"),
                 disk.available,
